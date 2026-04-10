@@ -146,3 +146,11 @@ class WSIAnalyzer:
         
         if status_callback: status_callback(f"分析完成！共检测到 {len(final_results)} 个病灶。")
         return final_results
+
+    def close(self):
+        """ 释放 OpenSlide 句柄和 GPU 显存"""
+        if hasattr(self, 'slide') and self.slide is not None:
+            self.slide.close()
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()

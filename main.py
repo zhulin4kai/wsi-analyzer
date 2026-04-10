@@ -74,6 +74,9 @@ class AIAnalysisThread(QThread):
                 self.error_occurred.emit(f"运行时错误: {str(re)}")
         except Exception as e:
             self.error_occurred.emit(f"AI 引擎异常: {str(e)}")
+        finally:
+            if analyzer is not None:
+                analyzer.close()
 
 
 # ==================== 模块 B & C: UI 交互与结果渲染 ====================
