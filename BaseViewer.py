@@ -19,9 +19,15 @@ class WSIView(QGraphicsView):
         self.scene_canvas = QGraphicsScene(self)
         self.setScene(self.scene_canvas)
 
+        # 宏观底图铺垫层
+        self.bg_layer_item = QGraphicsPixmapItem()
+        self.bg_layer_item.setZValue(-1)
+        self.scene_canvas.addItem(self.bg_layer_item)
+
         # 2. 核心渲染载体：整个 Scene 中只保留一个 PixmapItem 用于显示当前视口图像
         # 这样可以绝对避免频繁创建删除 Item 导致的内存泄漏
         self.viewport_item = QGraphicsPixmapItem()
+        self.viewport_item.setZValue(0)
         self.scene_canvas.addItem(self.viewport_item)
 
         # 3. 视图优化设置
@@ -58,13 +64,34 @@ class WSIView(QGraphicsView):
 
         # 获取 Level 0 的绝对物理尺寸
         w, h = self.slide.dimensions
-
-        # 【核心约束】：将 Scene 的尺寸严格设置为 WSI Level 0 的尺寸
+        # 将 Scene 的尺寸严格设置为 WSI Level 0 的尺寸
         # 建立全局绝对坐标系：Scene 的 (0, 0) 就是切片的左上角
         self.scene_canvas.setSceneRect(0, 0, w, h)
 
         # 清空视图之前的变换
         self.resetTransform()
+
+        try:
+            # 提取倒数第一层（即最低分辨率层，体积最小，加载极快）
+            last_level = self.slide.level_count - 1
+            dim = self.slide.level_dimensions[last_level]
+
+            # OpenSlide 默认提取为 RGBA 格式，需转为 RGB
+            thumb_rgba = self.slide.read_region((0, 0), last_level, dim)
+            thumb_img = thumb_rgba.convert("RGB")
+
+            # 设置到底图图层中
+            self.bg_layer_item.setPixmap(QPixmap.fromImage(ImageQt(thumb_img)))
+
+            # 【核心映射算式】：Level 0 物理宽度 / 缩略图宽度
+            downsample_factor = w / dim[0]
+
+            # 将低分辨率的缩略图强制物理放大 downsample_factor 倍
+            # 这样这张图就刚好 1:1 铺满了无穷大的 Scene 画布，充当兜底的障眼法
+            self.bg_layer_item.setScale(downsample_factor)
+
+        except Exception as e:
+            print(f"宏观底图加载失败（不影响核心功能）:{e}")
 
         # 计算初始缩放比例（让整个切片刚好适应当前窗口大小）
         view_rect = self.viewport().rect()
