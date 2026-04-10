@@ -10,12 +10,13 @@ from ultralytics import YOLO
 
 
 class WSIAnalyzer:
-    def __init__(self, svs_path, model_path, patch_size=512, stride=400, batch_size=32, nms_iou_thresh=0.3):
+    def __init__(self, svs_path, model_path, patch_size=512, stride=400, batch_size=32, nms_iou_thresh=0.3, conf_thresh=0.5):
         self.svs_path = svs_path
         self.patch_size = patch_size
         self.stride = stride
         self.batch_size = batch_size
         self.nms_iou_thresh = nms_iou_thresh
+        self.conf_thresh = conf_thresh
 
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         print(f"[*] 使用计算设备: {self.device}")
@@ -44,8 +45,12 @@ class WSIAnalyzer:
         
         contours, _ = cv2.findContours(binary_cleaned, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         solid_mask = np.zeros_like(gray)
-        min_area = 1000  
-        valid_contours =[cnt for cnt in contours if cv2.contourArea(cnt) > min_area]
+
+        # 过滤掉小于 0.1% 面积的斑点
+        total_area = gray.shape[0] * gray.shape[1]
+        min_area = total_area * 0.001
+
+        valid_contours = [cnt for cnt in contours if cv2.contourArea(cnt) > min_area]
         cv2.drawContours(solid_mask, valid_contours, -1, 255, thickness=-1)
 
         return solid_mask, downsample_factor
@@ -78,7 +83,7 @@ class WSIAnalyzer:
                 patch_rgba = self.slide.read_region((x_min, y_min), 0, (self.patch_size, self.patch_size))
                 batch_imgs.append(patch_rgba.convert('RGB'))
 
-            results = self.model(batch_imgs, verbose=False, device=self.device)
+            results = self.model(batch_imgs, verbose=False, device=self.device, conf=self.conf_thresh)
 
             for i, result in enumerate(results):
                 X_min, Y_min = batch_coords[i]
