@@ -5,6 +5,70 @@ from PySide6.QtGui import QPixmap, QPainter, QImage
 from PySide6.QtWidgets import (QMainWindow, QGraphicsView,
                                QGraphicsScene, QGraphicsPixmapItem, QFileDialog, QMessageBox)
 
+
+class RenderWorker(QThread):
+    """
+    独立于主界面的后台渲染线程。
+    负责执行极其耗时的 OpenSlide IO 读取和 PIL 转 QImage 像素计算。
+    """
+    # 信号：传递 版本号, 图像数据, X坐标, Y坐标, 放大比例
+    image_ready = Signal(int, QImage, int, int, float)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._mutex = QMutex()
+        self._cond = QWaitCondition()
+        self._request = None
+        self._is_running = True
+
+    def request_render(self, slide, x, y, level, w, h, scale, version):
+        """主线程调用此方法，提交最新的渲染请求"""
+        with QMutexLocker(self._mutex):
+            # 永远只保留最新的一次请求，覆盖掉旧的未处理请求
+            self._request = (slide, x, y, level, w, h, scale, version)
+            self._cond.wakeOne()  # 唤醒等待中的后台线程
+
+    def run(self):
+        """后台常驻循环"""
+        while self._is_running:
+            self._mutex.lock()
+            # 如果没有任务，让线程睡眠，不占 CPU
+            if self._request is None:
+                self._cond.wait(self._mutex)
+
+            if not self._is_running:
+                self._mutex.unlock()
+                break
+
+            # 取出最新的任务，并清空槽位
+            req = self._request
+            self._request = None
+            self._mutex.unlock()
+
+            if req:
+                slide, x, y, level, w, h, scale, version = req
+                try:
+                    # 1. 耗时操作：底层 C 库读取图像
+                    pil_img = slide.read_region((x, y), level, (w, h))
+
+                    # 2. 耗时操作：内存像素格式转换
+                    # 必须调用 .copy() 切断与 PIL 的内存绑定，防止跨线程引发 C++ 崩溃
+                    qimg = ImageQt(pil_img).copy()
+
+                    # 3. 将成品图像发回给主 UI 线程
+                    self.image_ready.emit(version, qimg, x, y, scale)
+                except Exception as e:
+                    print(f"RenderWorker 发生异常: {e}")
+
+    def stop(self):
+        """安全停止线程"""
+        self._is_running = False
+        with QMutexLocker(self._mutex):
+            self._cond.wakeOne()
+        self.wait()
+
+
+
 class WSIView(QGraphicsView):
     """
     核心视口组件：负责处理鼠标交互（平移、缩放）并按需调度 OpenSlide 渲染
@@ -51,12 +115,115 @@ class WSIView(QGraphicsView):
         # 用于放置在连续滚动滚轮或拖拽时，高频重复发射 interaction_started 信号
         self._is_interaction = False
 
-        # 5. 防抖定时器 (Debounce)
-        # 在连续拖拽或滚轮时，不触发耗时的 read_region，动作停止 x ms 后才渲染高清图
+
+        # 异步渲染核心
+        # 5. 防抖定时器
+        # 记录当前请求的版本号
+        self.render_version = 0
+
+        # 启动后台渲染线程
+        self.render_worker = RenderWorker(self)
+        self.render_worker.image_ready.connect(self._on_image_ready)
+        self.render_worker.start()
+
+        # 1. 渲染触发定时器 (极速响应)
+        # 负责不断去后台取最新高清图，哪怕在拖拽中也可以极速触发
         self.render_timer = QTimer()
         self.render_timer.setSingleShot(True)
-        self.render_timer.setInterval(350)
-        self.render_timer.timeout.connect(self._render_high_res_viewport)
+        self.render_timer.setInterval(50)  # 降到极低的 50ms
+        self.render_timer.timeout.connect(self._request_high_res_render)
+
+        # 2. 绝对静止定时器 (掌控 UI 繁重图层)
+        # 只有在完全没有任何交互后，才允许绘制沉重的 AI 画框
+        self.idle_timer = QTimer()
+        self.idle_timer.setSingleShot(True)
+        self.idle_timer.setInterval(300)  # 300ms 不操作，才认为交互真正结束
+        self.idle_timer.timeout.connect(self._on_absolute_idle)
+
+    def _mark_interaction(self):
+        """统一管理交互状态的入口"""
+        # 1. 重置静止定时器
+        self.idle_timer.start()
+
+        # 2. 如果当前不在交互状态，进入交互并通知主界面隐藏画框
+        if not self._is_interaction:
+            self._is_interaction = True
+            self.interaction_started.emit()
+
+    def _request_high_res_render(self):
+        """
+        主线程只负责算坐标
+        由定时器触发，计算好所需坐标后给后台线程。
+        """
+
+        def finish_interaction_early():
+            if self._is_interaction:
+                self._is_interaction = False
+                self.interaction_finished.emit()
+
+        if not self.slide:
+            finish_interaction_early()
+            return
+
+        viewport_rect = self.viewport().rect()
+        visible_scene_rect = self.mapToScene(viewport_rect).boundingRect()
+        intersected_rect = visible_scene_rect.intersected(self.scene_canvas.sceneRect())
+
+        if intersected_rect.isEmpty():
+            finish_interaction_early()
+            return
+
+        current_scale = self.transform().m11()
+        target_downsample = 1.0 / current_scale
+
+        best_level = self.slide.get_best_level_for_downsample(target_downsample)
+        level_downsample = self.slide.level_downsamples[best_level]
+
+        loc_x = int(intersected_rect.left())
+        loc_y = int(intersected_rect.top())
+        size_w = int(intersected_rect.width() / level_downsample)
+        size_h = int(intersected_rect.height() / level_downsample)
+
+        if size_w <= 0 or size_h <= 0:
+            finish_interaction_early()
+            return
+
+        # 递增版本号，并将沉重的任务丢给后台线程
+        # 主线程瞬间执行完毕，继续响应鼠标拖拽。
+        self.render_version += 1
+        self.render_worker.request_render(
+            self.slide, loc_x, loc_y, best_level, size_w, size_h, level_downsample, self.render_version
+        )
+
+    def _on_image_ready(self, version, qimg, x, y, scale):
+        """
+        当后台线程把图处理好送回来时，主线程进行审查。
+        """
+        # 结果丢弃
+        # 如果送回来的版本号低于当前版本号，说明用户在渲染期间又动了鼠标。
+        # 这张图已经过期，不进行任何 UI 更新
+        if version != self.render_version:
+            return
+
+        if self._is_panning:
+            return
+
+        # 验证通过，更新 UI 显示
+        pixmap = QPixmap.fromImage(qimg)
+        self.viewport_item.setPixmap(pixmap)
+        self.viewport_item.setPos(x, y)
+        self.viewport_item.setScale(scale)
+
+        # 真正的图贴好之后，再结束交互状态，把隐藏的 AI 框重新显示出来
+        if self._is_interaction:
+            self._is_interaction = False
+            self.interaction_finished.emit()
+
+    def closeEvent(self, event):
+        """关闭窗口时安全退出线程"""
+        if hasattr(self, 'render_worker'):
+            self.render_worker.stop()
+        super().closeEvent(event)
 
     def load_wsi(self, file_path):
         """加载 SVS 文件并初始化绝对坐标系"""
@@ -114,9 +281,7 @@ class WSIView(QGraphicsView):
         if not self.slide: return
 
         # 如果是连续滚动动作的第一下，触发交互开始信号
-        if not self._is_interaction:
-            self._is_interaction = True
-            self.interaction_started.emit()
+        self._mark_interaction()
 
         # 每次滚动的缩放步长
         zoom_factor = 1.15
@@ -136,26 +301,24 @@ class WSIView(QGraphicsView):
 
         # 重置防抖定时器
         self.render_timer.start()
-        self._trigger_view_update()
+        self.view_rect_changed.emit(self.get_visible_rect())
 
     def mousePressEvent(self, event):
         """重写鼠标按下：开启平移"""
         if event.button() == Qt.LeftButton and self.slide:
             # 鼠标按下的瞬间，进入交互状态
-            if not self._is_interaction:
-                self._is_interaction = True
-                self.interaction_started.emit()
-
+            self._mark_interaction()
             self._is_panning = True
             self._last_mouse_pos = event.position().toPoint()
             self.setCursor(Qt.ClosedHandCursor)
 
         super().mousePressEvent(event)
-        self._trigger_view_update()
 
     def mouseMoveEvent(self, event):
         """重写鼠标移动：计算偏移量并调整滚动条实现平移"""
         if self._is_panning:
+            self._mark_interaction()
+
             current_pos = event.position().toPoint()
             delta = current_pos - self._last_mouse_pos
             self._last_mouse_pos = current_pos
@@ -168,6 +331,7 @@ class WSIView(QGraphicsView):
 
             # 平移时重置防抖定时器
             self.render_timer.start()
+            self.view_rect_changed.emit(self.get_visible_rect())
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
@@ -175,8 +339,14 @@ class WSIView(QGraphicsView):
         if event.button() == Qt.LeftButton:
             self._is_panning = False
             self.setCursor(Qt.ArrowCursor)
+            self.idle_timer.start()
             self.render_timer.start()
         super().mouseReleaseEvent(event)
+
+    def _on_absolute_idle(self):
+        if self._is_interaction:
+            self._is_interaction = False
+            self.interaction_finished.emit()
 
     # ==================== 模块 C: 视口按需渲染核心逻辑 ====================
     def _render_high_res_viewport(self):
