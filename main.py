@@ -106,6 +106,7 @@ class AIMainWindow(MainWindow):
         # 状态记录
         self.current_wsi_path = None
         self.current_model_path = "best.pt"  # 默认模型路径
+        self._was_ai_visible = True # 是否勾选预测框
 
         # AI 图层组
         self.ai_layer_group = QGraphicsItemGroup()
@@ -113,6 +114,32 @@ class AIMainWindow(MainWindow):
 
         self._init_ai_ui()
         self._init_minimap_dock()
+
+        # 绑定视觉降级（LOD）信号
+        self.viewer.interaction_started.connect(self._on_interaction_start)
+        self.viewer.interaction_finished.connect(self._on_interaction_finish)
+
+    # LOD 动态视觉降级控制
+    def _on_interaction_start(self):
+        """
+        槽函数：交互开始 (鼠标按下或滚轮初次滚动)
+        动作：静默隐藏重度图层，释放 Qt C++ 底层的重绘压力。
+        """
+        # 记录隐藏前的真实意图（因为用户可能本来就把框关掉了）
+        self._was_ai_visible = self.chk_show_ai.isChecked()
+
+        # 强制隐藏包含成千上万个矩形的 AI 图层组
+        self.ai_layer_group.setVisible(False)
+
+    def _on_interaction_finish(self):
+        """
+        槽函数：交互结束 (防抖定时器结束，且高清切图渲染完毕)
+        动作：根据记忆的状态，恢复图层显示。
+        """
+        # 只有在用户原本期望显示的情况下，才恢复画框
+        if self._was_ai_visible:
+            self.ai_layer_group.setVisible(True)
+
 
     def open_file(self):
         """重写父类的打开文件逻辑，以便拦截并记录当前的 SVS 绝对路径"""

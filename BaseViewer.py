@@ -1,16 +1,17 @@
 import openslide
 from PIL.ImageQt import ImageQt
-from PySide6.QtCore import Qt, QTimer, QRectF, Signal
-from PySide6.QtGui import QPixmap, QPainter
+from PySide6.QtCore import Qt, QTimer, QRectF, Signal, QThread, QMutex, QMutexLocker, QWaitCondition
+from PySide6.QtGui import QPixmap, QPainter, QImage
 from PySide6.QtWidgets import (QMainWindow, QGraphicsView,
                                QGraphicsScene, QGraphicsPixmapItem, QFileDialog, QMessageBox)
-
 
 class WSIView(QGraphicsView):
     """
     核心视口组件：负责处理鼠标交互（平移、缩放）并按需调度 OpenSlide 渲染
     """
     view_rect_changed = Signal(QRectF)
+    interaction_started = Signal()
+    interaction_finished = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -47,11 +48,14 @@ class WSIView(QGraphicsView):
         self._is_panning = False
         self._last_mouse_pos = None
 
+        # 用于放置在连续滚动滚轮或拖拽时，高频重复发射 interaction_started 信号
+        self._is_interaction = False
+
         # 5. 防抖定时器 (Debounce)
-        # 在连续拖拽或滚轮时，不触发耗时的 read_region，动作停止 150ms 后才渲染高清图
+        # 在连续拖拽或滚轮时，不触发耗时的 read_region，动作停止 x ms 后才渲染高清图
         self.render_timer = QTimer()
         self.render_timer.setSingleShot(True)
-        self.render_timer.setInterval(150)
+        self.render_timer.setInterval(350)
         self.render_timer.timeout.connect(self._render_high_res_viewport)
 
     def load_wsi(self, file_path):
@@ -109,6 +113,11 @@ class WSIView(QGraphicsView):
         """重写滚轮事件：实现基于鼠标锚点的平滑缩放"""
         if not self.slide: return
 
+        # 如果是连续滚动动作的第一下，触发交互开始信号
+        if not self._is_interaction:
+            self._is_interaction = True
+            self.interaction_started.emit()
+
         # 每次滚动的缩放步长
         zoom_factor = 1.15
         if event.angleDelta().y() < 0:
@@ -129,13 +138,18 @@ class WSIView(QGraphicsView):
         self.render_timer.start()
         self._trigger_view_update()
 
-
     def mousePressEvent(self, event):
         """重写鼠标按下：开启平移"""
         if event.button() == Qt.LeftButton and self.slide:
+            # 鼠标按下的瞬间，进入交互状态
+            if not self._is_interaction:
+                self._is_interaction = True
+                self.interaction_started.emit()
+
             self._is_panning = True
             self._last_mouse_pos = event.position().toPoint()
             self.setCursor(Qt.ClosedHandCursor)
+
         super().mousePressEvent(event)
         self._trigger_view_update()
 
@@ -169,7 +183,15 @@ class WSIView(QGraphicsView):
         """
         核心渲染逻辑：坐标映射 -> 计算层级 -> 截取图像 -> 对齐显示
         """
-        if not self.slide: return
+        # 防止函数提前return， 提取一个重置方法
+        def finish_interaction():
+            if self._is_interaction:
+                self._is_interaction = False
+                self.interaction_finished.emit()
+
+        if not self.slide:
+            finish_interaction()
+            return
 
         # 1. 视图 -> Scene 坐标映射
         # 获取当前 Viewport 在屏幕上的矩形
@@ -180,6 +202,7 @@ class WSIView(QGraphicsView):
         # 与 Scene 的物理边界取交集，防止读取超出 WSI 范围的无效数据
         intersected_rect = visible_scene_rect.intersected(self.scene_canvas.sceneRect())
         if intersected_rect.isEmpty():
+            finish_interaction()
             return
 
         # 2. 动态层级 (Level) 计算
@@ -202,7 +225,9 @@ class WSIView(QGraphicsView):
         size_w = int(intersected_rect.width() / level_downsample)
         size_h = int(intersected_rect.height() / level_downsample)
 
-        if size_w <= 0 or size_h <= 0: return
+        if size_w <= 0 or size_h <= 0:
+            finish_interaction()
+            return
 
         # 4. 从后端读取特定范围图像块 (IO 耗时操作)
         try:
@@ -210,6 +235,7 @@ class WSIView(QGraphicsView):
             pil_img = self.slide.read_region((loc_x, loc_y), best_level, (size_w, size_h))
         except Exception as e:
             print(f"OpenSlide Read Error: {e}")
+            finish_interaction()
             return
 
         # 5. PIL Image 转 QPixmap (内存操作)
@@ -224,11 +250,13 @@ class WSIView(QGraphicsView):
         self.viewport_item.setPos(loc_x, loc_y)
 
         # 【关键步骤】由于我们提取的是降采样过的图像，为了让它在 Level 0 场景中占据正确的物理大小，
-        # 我们必须把这张图片放大 level_downsample 倍！
-        # (此时 QGraphicsView 的缩小和这里的放大相互抵消，最终呈现在屏幕上是 1:1 的清晰像素)
+        # 我们必须把这张图片放大 level_downsample 倍
+        # 此时 QGraphicsView 的缩小和这里的放大相互抵消，最终呈现在屏幕上是 1:1 的清晰像素
         self.viewport_item.setScale(level_downsample)
+        finish_interaction()
 
         # ==================== 模块 D: 鹰眼图 ====================
+
     def get_visible_rect(self):
         """获取当前主视图处于 Level 0 坐标系下的可见矩形区域"""
         return self.mapToScene(self.viewport().rect()).boundingRect()
@@ -270,9 +298,3 @@ class MainWindow(QMainWindow):
         )
         if file_path:
             self.viewer.load_wsi(file_path)
-
-# if __name__ == "__main__":
-#    app = QApplication(sys.argv)
-#    window = MainWindow()
-#    window.show()
-#    sys.exit(app.exec())
