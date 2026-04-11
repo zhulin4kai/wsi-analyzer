@@ -2,3 +2,5 @@ app_icon.ico
 best.pt
 wsi_viewer.spec
 .idea
+.wsi_cache/
+current_wsi_analysis.json

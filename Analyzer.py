@@ -138,7 +138,7 @@ class WSIAnalyzer:
         if status_callback: status_callback(f"阶段 3/4: 开始模型推理 (共 {len(valid_coords)} 个图像块)...")
         global_boxes, global_scores, global_classes = self._batch_inference(valid_coords, progress_callback)
 
-        if status_callback: status_callback("阶段 4/4: 正在执行全局非极大值抑制 (NMS)...")
+        # if status_callback: status_callback("阶段 4/4: 正在执行全局非极大值抑制 (NMS)...")
         final_results = self._apply_global_nms(global_boxes, global_scores, global_classes)
 
         with open(output_json, 'w', encoding='utf-8') as f:

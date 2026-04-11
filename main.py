@@ -1,5 +1,6 @@
 import sys
 import os
+import hashlib
 
 def resource_path(relative_path):
     """生成资源绝对路径，兼顾开发环境与 PyInstaller 打包环境"""
@@ -10,6 +11,22 @@ def resource_path(relative_path):
         # 目录模式 (--onedir) 下
         base_path = os.path.dirname(os.path.abspath(sys.argv[0]))
     return os.path.join(base_path, relative_path)
+
+def get_wsi_hash(file_path):
+    """
+    基于文件元数据的轻量级哈希算法秒级运算
+    联合要素: 文件绝对路径 + 字节级精确大小 + 最后修改时间戳
+    """
+    try:
+        abs_path = os.path.abspath(file_path)
+        file_size = os.path.getsize(abs_path)
+        mtime = os.path.getmtime(abs_path)
+
+        feature_str = f"{abs_path}_{file_size}_{mtime}"
+        return hashlib.md5(feature_str.encode('utf-8')).hexdigest()
+    except Exception as e:
+        print(f"获取特征哈希失败: {e}")
+        return None
 
 # 只需要在 import openslide 之前，先 import openslide_bin，它会自动挂载 DLL
 import openslide_bin
@@ -103,12 +120,45 @@ class AIMainWindow(MainWindow):
             self, "选择全尺寸病理切片", "", "WSI Files (*.svs *.tif *.ndpi)"
         )
         if file_path:
+            # 状态安全重置
+            # 切换切片前，务必清空上一张切片留下的 AI 预测框，防止空间坐标错位
+            for item in self.ai_layer_group.childItems():
+                self.ai_layer_group.removeFromGroup(item)
+                self.viewer.scene_canvas.removeItem(item)
+            self.current_ai_results = []
+            if hasattr(self, 'btn_export'):
+                self.btn_export.setEnabled(False)  # 禁用导出按钮
+
             self.current_wsi_path = file_path
             self.viewer.load_wsi(file_path)
             self.statusBar().showMessage(f"已加载: {os.path.basename(file_path)}")
 
             if self.viewer.slide:
                 self.minimap.load_minimap(self.viewer.slide)
+
+            # 本地缓存静默读取
+            wsi_hash = get_wsi_hash(file_path)
+            if wsi_hash:
+                cache_dir = ".wsi_cache"
+                cache_file = os.path.join(cache_dir, f"{wsi_hash}.json")
+
+                # 如果缓存命中，证明这个切片以前跑过数十分钟的 YOLO
+                if os.path.exists(cache_file):
+                    reply = QMessageBox.question(
+                        self, "发现分析缓存",
+                        "检测到该病理切片已有历史检测记录。\n是否直接加载本地缓存结果？",
+                        QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes
+                    )
+                    if reply == QMessageBox.Yes:
+                        try:
+                            with open(cache_file, 'r', encoding='utf-8') as f:
+                                cache_data = json.load(f)
+                            # 直接调用渲染函数，实现秒级回显
+                            self.render_ai_results(cache_data)
+                            self.statusBar().showMessage(f"已从本地缓存加载 {len(cache_data)} 个病灶。")
+                        except Exception as e:
+                            QMessageBox.warning(self, "缓存加载异常", f"缓存文件损坏，请重新运行分析: {e}")
+
 
     def _init_ai_ui(self):
         """初始化顶部工具栏"""
@@ -207,7 +257,7 @@ class AIMainWindow(MainWindow):
 
             rect_item = QGraphicsRectItem(QRectF(x_min, y_min, x_max - x_min, y_max - y_min))
 
-            # 【化妆笔模式】保证在全景缩小（Level 0 大尺寸）下依然可见
+            # 化妆笔模式保证在全景缩小（Level 0 大尺寸）下依然可见
             pen = QPen(QColor(255, 0, 0))
             pen.setWidth(2)
             pen.setCosmetic(True)
@@ -222,6 +272,24 @@ class AIMainWindow(MainWindow):
             self.btn_export.setEnabled(True)
 
         self.ai_layer_group.setVisible(self.chk_show_ai.isChecked())
+        self.current_ai_results = results
+        if hasattr(self, 'btn_export'):
+            self.btn_export.setEnabled(len(results) > 0)
+
+        if self.current_wsi_path:
+            wsi_hash = get_wsi_hash(self.current_wsi_path)
+            if wsi_hash:
+                try:
+                    cache_dir = ".wsi_cache"
+                    if not os.path.exists(cache_dir):
+                        os.makedirs(cache_dir)
+
+                    cache_file = os.path.join(cache_dir, f"{wsi_hash}.json")
+                    with open(cache_file, "w", encoding='utf-8') as f:
+                        json.dump(results, f, ensure_ascii=False, indent=4)
+                except Exception as e:
+                    print(f"AI 结果缓存写入失败: {e}")
+
         QMessageBox.information(self, "分析完成", f"全片微乳头细胞检测完毕，共标记 {len(results)} 处疑似病灶。")
 
 
