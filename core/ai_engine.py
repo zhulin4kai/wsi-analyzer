@@ -1,11 +1,11 @@
 import json
 import cv2
 import numpy as np
-import openslide
 import torch
 import torchvision
 from tqdm import tqdm
 from ultralytics import YOLO
+from core import WSIDataEngine
 
 class WSIAnalyzer:
     def __init__(self, svs_path, model_path, patch_size=512, stride=400, batch_size=32, nms_iou_thresh=0.3,
@@ -26,15 +26,12 @@ class WSIAnalyzer:
 
         # 加载 WSI 图像（后台线程独立句柄）
         print(f"[*] 正在打开 WSI 文件: {svs_path}")
-        self.slide = openslide.OpenSlide(svs_path)
-        self.level_0_dim = self.slide.level_dimensions[0]
+        self.slide_engine = WSIDataEngine(svs_path)
+        self.level_0_dim = self.slide_engine.level_0_dim
 
     def _generate_solid_mask(self, target_level=3):
-        level = min(target_level, self.slide.level_count - 1)
-        downsample_factor = self.slide.level_downsamples[level]
-        dim = self.slide.level_dimensions[level]
-
-        thumb_rgba = self.slide.read_region((0, 0), level, dim)
+        level, dim, downsample_factor = self.slide_engine.get_level_info(target_level)
+        thumb_rgba = self.slide_engine.read_region((0, 0), level, dim)
         thumb_rgb = np.array(thumb_rgba.convert('RGB'))
         gray = cv2.cvtColor(thumb_rgb, cv2.COLOR_RGB2GRAY)
         _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)
@@ -79,7 +76,7 @@ class WSIAnalyzer:
         for idx, batch_coords in enumerate(tqdm(batches, desc="推理进度")):
             batch_imgs = []
             for (x_min, y_min) in batch_coords:
-                patch_rgba = self.slide.read_region((x_min, y_min), 0, (self.patch_size, self.patch_size))
+                patch_rgba = self.slide_engine.read_region((x_min, y_min), 0, (self.patch_size, self.patch_size))
                 batch_imgs.append(patch_rgba.convert('RGB'))
 
             results = self.model(batch_imgs, verbose=False, device=self.device, conf=self.conf_thresh)
@@ -148,8 +145,8 @@ class WSIAnalyzer:
 
     def close(self):
         """ 释放 OpenSlide 句柄和 GPU 显存"""
-        if hasattr(self, 'slide') and self.slide is not None:
-            self.slide.close()
+        if hasattr(self, 'slide_engine') and self.slide_engine is not None:
+            self.slide_engine.close()
 
         if torch.cuda.is_available():
             torch.cuda.empty_cache()

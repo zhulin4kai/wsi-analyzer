@@ -55,6 +55,7 @@ class MainWindow(QMainWindow):
         file_path, _ = QFileDialog.getOpenFileName(
             self, "选择全尺寸病理切片", "", "WSI Files (*.svs *.tif *.ndpi)"
         )
+
         if file_path:
             # 状态安全重置
             # 切换切片前，务必清空上一张切片留下的 AI 预测框，防止空间坐标错位
@@ -69,7 +70,7 @@ class MainWindow(QMainWindow):
             self.viewer.load_wsi(file_path)
             self.statusBar().showMessage(f"已加载: {os.path.basename(file_path)}")
 
-            if self.viewer.slide_engine:
+            if hasattr(self.viewer, 'slide_engine') and self.viewer.slide_engine:
                 self.minimap.load_minimap(self.viewer.slide_engine)
 
             # 本地缓存静默读取

@@ -17,11 +17,11 @@ class RenderWorker(QThread):
         self._request = None
         self._is_running = True
 
-    def request_render(self, slide, x, y, level, w, h, scale, version):
+    def request_render(self, slide_engine, x, y, level, w, h, scale, version):
         """主线程调用此方法，提交最新的渲染请求"""
         with QMutexLocker(self._mutex):
             # 永远只保留最新的一次请求，覆盖掉旧的未处理请求
-            self._request = (slide, x, y, level, w, h, scale, version)
+            self._request = (slide_engine, x, y, level, w, h, scale, version)
             self._cond.wakeOne()  # 唤醒等待中的后台线程
 
     def run(self):
@@ -42,10 +42,10 @@ class RenderWorker(QThread):
             self._mutex.unlock()
 
             if req:
-                slide, x, y, level, w, h, scale, version = req
+                slide_engine, x, y, level, w, h, scale, version = req
                 try:
                     # 1. 耗时操作：底层 C 库读取图像
-                    pil_img = slide.read_region((x, y), level, (w, h))
+                    pil_img = slide_engine.read_region((x, y), level, (w, h))
 
                     # 2. 耗时操作：内存像素格式转换
                     # 必须调用 .copy() 切断与 PIL 的内存绑定，防止跨线程引发 C++ 崩溃

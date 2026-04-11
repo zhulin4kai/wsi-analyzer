@@ -32,22 +32,14 @@ class MinimapView(QGraphicsView):
 
         self.downsample_factor = 1.0  # Level 0 到缩略图的缩放系数
 
-    def load_minimap(self, slide):
+    def load_minimap(self, slide_engine):
         """加载缩略图并计算映射系数"""
-        # 选取最小级别作为鹰眼图
-        level = slide.level_count - 1
-        dim = slide.level_dimensions[level]
-        dim0 = slide.dimensions
+        thumb_img, self.downsample_factor = slide_engine.get_thumbnail(level_from_last=1)
 
-        # 计算缩放系数（Level0 宽度 / 缩略图 宽度）
-        self.downsample_factor = dim0[0] / dim[0]
-
-        # 读取静态 RGB 图像并加载到场景
-        thumb_img = slide.read_region((0, 0), level, dim).convert("RGB")
         self.bg_item.setPixmap(QPixmap.fromImage(ImageQt(thumb_img)))
 
         # 约束 Scene 大小并自动适配 View 视口
-        self.scene_canvas.setSceneRect(0, 0, dim[0], dim[1])
+        self.scene_canvas.setSceneRect(0, 0, thumb_img.width, thumb_img.height)
         self.fitInView(self.scene_canvas.sceneRect(), Qt.KeepAspectRatio)
 
     def update_indicator(self, level0_rect: QRectF):
