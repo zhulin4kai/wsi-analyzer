@@ -1,5 +1,4 @@
 import json
-
 import cv2
 import numpy as np
 import openslide
@@ -8,9 +7,9 @@ import torchvision
 from tqdm import tqdm
 from ultralytics import YOLO
 
-
 class WSIAnalyzer:
-    def __init__(self, svs_path, model_path, patch_size=512, stride=400, batch_size=32, nms_iou_thresh=0.3, conf_thresh=0.5):
+    def __init__(self, svs_path, model_path, patch_size=512, stride=400, batch_size=32, nms_iou_thresh=0.3,
+                 conf_thresh=0.5):
         self.svs_path = svs_path
         self.patch_size = patch_size
         self.stride = stride
@@ -39,10 +38,10 @@ class WSIAnalyzer:
         thumb_rgb = np.array(thumb_rgba.convert('RGB'))
         gray = cv2.cvtColor(thumb_rgb, cv2.COLOR_RGB2GRAY)
         _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)
-        
+
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
         binary_cleaned = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel)
-        
+
         contours, _ = cv2.findContours(binary_cleaned, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         solid_mask = np.zeros_like(gray)
 
@@ -57,7 +56,7 @@ class WSIAnalyzer:
 
     def _generate_patch_coordinates(self, solid_mask, downsample_factor):
         W, H = self.level_0_dim
-        valid_coords =[]
+        valid_coords = []
         for y in range(0, H - self.patch_size, self.stride):
             for x in range(0, W - self.patch_size, self.stride):
                 cx_level0 = x + self.patch_size / 2
@@ -72,13 +71,13 @@ class WSIAnalyzer:
     def _batch_inference(self, valid_coords, progress_callback=None):
         global_boxes = []
         global_scores = []
-        global_classes =[]
+        global_classes = []
 
         batches = [valid_coords[i:i + self.batch_size] for i in range(0, len(valid_coords), self.batch_size)]
-        
+
         # 遍历批次，并向外抛出进度
         for idx, batch_coords in enumerate(tqdm(batches, desc="推理进度")):
-            batch_imgs =[]
+            batch_imgs = []
             for (x_min, y_min) in batch_coords:
                 patch_rgba = self.slide.read_region((x_min, y_min), 0, (self.patch_size, self.patch_size))
                 batch_imgs.append(patch_rgba.convert('RGB'))
@@ -99,7 +98,7 @@ class WSIAnalyzer:
                     global_boxes.append([loc_x1 + X_min, loc_y1 + Y_min, loc_x2 + X_min, loc_y2 + Y_min])
                     global_scores.append(score)
                     global_classes.append(cls_id)
-            
+
             # 【核心修改】触发进度条更新
             if progress_callback:
                 progress_percent = int((idx + 1) / len(batches) * 100)
@@ -109,15 +108,15 @@ class WSIAnalyzer:
 
     def _apply_global_nms(self, global_boxes, global_scores, global_classes):
         if len(global_boxes) == 0:
-            return[]
+            return []
         boxes_tensor = torch.tensor(global_boxes, dtype=torch.float32)
         scores_tensor = torch.tensor(global_scores, dtype=torch.float32)
         keep_indices = torchvision.ops.nms(boxes_tensor, scores_tensor, iou_threshold=self.nms_iou_thresh)
-        
-        final_results =[]
+
+        final_results = []
         for idx in keep_indices.cpu().numpy():
             final_results.append({
-                "bbox":[round(float(b), 2) for b in global_boxes[idx]],
+                "bbox": [round(float(b), 2) for b in global_boxes[idx]],
                 "confidence": round(float(global_scores[idx]), 4),
                 "class_id": int(global_classes[idx])
             })
@@ -143,7 +142,7 @@ class WSIAnalyzer:
 
         with open(output_json, 'w', encoding='utf-8') as f:
             json.dump(final_results, f, ensure_ascii=False, indent=4)
-        
+
         if status_callback: status_callback(f"分析完成！共检测到 {len(final_results)} 个病灶。")
         return final_results
 
