@@ -52,6 +52,7 @@ class MinimapView(QGraphicsView):
         h = level0_rect.height() / self.downsample_factor
 
         self.indicator.setRect(x, y, w, h)
+        self.viewport().update()
 
     def mousePressEvent(self, event):
         """【双向同步】：鹰眼图 -> 主视图"""
