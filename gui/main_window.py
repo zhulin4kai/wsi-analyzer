@@ -144,13 +144,22 @@ class MainWindow(QMainWindow):
                     QMessageBox.Yes | QMessageBox.No,
                 )
                 if reply == QMessageBox.Yes:
-                    self.render_ai_results(results)
+                    self.render_ai_results({"results": results, "status": "completed"})
                     self.statusBar().showMessage(
                         f"已从本地数据库加载 {len(results)} 个病灶。"
                     )
 
-    def render_ai_results(self, results):
+    def render_ai_results(self, results_dict):
         """渲染预测结果"""
+        if hasattr(self, "progress_dialog"):
+            self.progress_dialog.close()
+
+        results = results_dict.get("results", [])
+        status = results_dict.get("status", "completed")
+        valid_coords = results_dict.get("valid_coords", [])
+        processed_patches = results_dict.get("processed_patches", 0)
+        total_patches = results_dict.get("total_patches", 0)
+
         # 清空旧数据
         for item in self.ai_layer_group.childItems():
             self.ai_layer_group.removeFromGroup(item)
@@ -181,13 +190,21 @@ class MainWindow(QMainWindow):
             db.save_analysis(
                 file_path=self.current_wsi_path,
                 model_path=self.current_model_path or "",
-                status="completed",
-                total_patches=0,
-                processed_patches=0,
+                status=status,
+                total_patches=total_patches,
+                processed_patches=processed_patches,
                 results=results,
+                valid_coords=valid_coords,
             )
 
-        QMessageBox.information(self, "分析完成", f"共标记 {len(results)} 处疑似病灶。")
+        if status == "completed":
+            QMessageBox.information(
+                self, "分析完成", f"共标记 {len(results)} 处疑似病灶。"
+            )
+        else:
+            QMessageBox.information(
+                self, "分析已中止", f"进度已保存。当前标记 {len(results)} 处疑似病灶。"
+            )
 
     # LOD 动态视觉降级控制
     def _on_interaction_start(self):
@@ -269,21 +286,45 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "警告", "请先选择有效的模型权重 (.pt) 文件！")
             return
 
+        db = DatabaseManager()
+        cache_data = db.get_analysis(self.current_wsi_path)
+        resume_data = None
+
+        if cache_data and cache_data.get("status") == "interrupted":
+            msg_box = QMessageBox(self)
+            msg_box.setWindowTitle("发现中断的分析")
+            msg_box.setText(
+                "检测到该病理切片有未完成的分析记录。\n是否继续上次的分析进度？\n选择'否'将重新开始。"
+            )
+            msg_box.setIcon(QMessageBox.Question)
+            btn_yes = msg_box.addButton("是", QMessageBox.ActionRole)
+            btn_no = msg_box.addButton("否", QMessageBox.ActionRole)
+            msg_box.exec()
+
+            if msg_box.clickedButton() == btn_yes:
+                resume_data = cache_data
+            else:
+                db.delete_analysis(self.current_wsi_path)
+
         self.btn_analyze.setEnabled(False)
         self.settings_action.setEnabled(False)
+        self.btn_export.setEnabled(False)
 
         self.progress_dialog = QProgressDialog(
-            "正在进行全片 AI 检测...", None, 0, 100, self
+            "正在进行全片 AI 检测...", "取消", 0, 100, self
         )
         self.progress_dialog.setWindowTitle("分析进度")
-        self.progress_dialog.setWindowModality(Qt.WindowModal)
-        self.progress_dialog.setAutoClose(True)
-        self.progress_dialog.setAutoReset(True)
+        self.progress_dialog.setWindowModality(Qt.NonModal)
+        self.progress_dialog.setAutoClose(False)
+        self.progress_dialog.setAutoReset(False)
         self.progress_dialog.setValue(0)
+        self.progress_dialog.canceled.connect(self.cancel_ai_analysis)
 
-        # 传入当前切片路径和模型路径
+        # 传入当前切片路径和模型路径，以及可能的断点数据
         self.ai_thread = AIAnalysisWorker(
-            svs_path=self.current_wsi_path, model_path=self.current_model_path
+            svs_path=self.current_wsi_path,
+            model_path=self.current_model_path,
+            resume_data=resume_data,
         )
 
         # 连接信号与槽
@@ -297,7 +338,22 @@ class MainWindow(QMainWindow):
         self.progress_dialog.show()
         self.ai_thread.start()
 
+    def cancel_ai_analysis(self):
+        msg_box = QMessageBox(self)
+        msg_box.setWindowTitle("取消确认")
+        msg_box.setText("确定要中断当前的 AI 分析吗？进度将被保存。")
+        msg_box.setIcon(QMessageBox.Question)
+        btn_yes = msg_box.addButton("是", QMessageBox.ActionRole)
+        btn_no = msg_box.addButton("否", QMessageBox.ActionRole)
+        msg_box.exec()
+
+        if msg_box.clickedButton() == btn_yes:
+            if self.ai_thread and self.ai_thread.isRunning():
+                self.ai_thread.cancel()
+
     def handle_ai_error(self, err_msg):
+        if hasattr(self, "progress_dialog"):
+            self.progress_dialog.close()
         self.statusBar().showMessage("分析失败或被中断。")
         QMessageBox.critical(self, "AI 引擎错误", err_msg)
 
