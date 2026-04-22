@@ -6,6 +6,7 @@ import torchvision
 from tqdm import tqdm
 from ultralytics import YOLO
 from core import WSIDataEngine
+from utils import logger
 
 class WSIAnalyzer:
     def __init__(self, svs_path, model_path, patch_size=512, stride=400, batch_size=32, nms_iou_thresh=0.3,
@@ -18,14 +19,14 @@ class WSIAnalyzer:
         self.conf_thresh = conf_thresh
 
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        print(f"[*] 使用计算设备: {self.device}")
+        logger.info(f"[*] 使用计算设备: {self.device}")
 
         # 加载 YOLO 模型
-        print(f"[*] 正在加载 YOLOv8 模型: {model_path}")
+        logger.info(f"[*] 正在加载 YOLOv8 模型: {model_path}")
         self.model = YOLO(model_path)
 
         # 加载 WSI 图像（后台线程独立句柄）
-        print(f"[*] 正在打开 WSI 文件: {svs_path}")
+        logger.info(f"[*] 正在打开 WSI 文件: {svs_path}")
         self.slide_engine = WSIDataEngine(svs_path)
         self.level_0_dim = self.slide_engine.level_0_dim
 

@@ -3,7 +3,7 @@ import csv
 import json
 from PySide6.QtWidgets import (QMainWindow, QGraphicsRectItem, QGraphicsItemGroup,
                                QToolBar, QPushButton, QProgressBar, QCheckBox,
-                               QMessageBox, QFileDialog, QLabel, QDockWidget)
+                               QMessageBox, QFileDialog, QLabel, QDockWidget, QVBoxLayout, QGraphicsDropShadowEffect)
 from PySide6.QtCore import Qt, QRectF
 from PySide6.QtGui import QPen, QColor
 
@@ -37,7 +37,7 @@ class MainWindow(QMainWindow):
         # 3. 初始化所有 UI 面板
         self._init_menu()
         self._init_ai_ui()
-        self._init_minimap_dock()
+        self._init_minimap_overlay()
 
         # 4. 绑定信号
         self.viewer.interaction_started.connect(self._on_interaction_start)
@@ -221,32 +221,33 @@ class MainWindow(QMainWindow):
     def toggle_ai_visibility(self, state):
         self.ai_layer_group.setVisible(state == Qt.Checked)
 
-    def _init_minimap_dock(self):
-        """初始化鹰眼图停靠面板"""
-        # 实例化鹰眼图视图
-        self.minimap = MinimapView()
-        self.minimap.setMinimumSize(250, 200)  # 设置最小尺寸
+    def _init_minimap_overlay(self):
+        """ 初始化鹰眼图悬浮层 """
+        self.minimap = MinimapView(self.viewer)
+        self.minimap.setFixedSize(250, 200)  # 悬浮窗通常使用固定大小
 
-        # 创建 QDockWidget 作为容器
-        self.dock_minimap = QDockWidget("全景导航 (Minimap)", self)
-        self.dock_minimap.setWidget(self.minimap)
-        # 允许停靠在左侧或右侧
-        self.dock_minimap.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
-        # 允许浮动和移动
-        self.dock_minimap.setFeatures(QDockWidget.DockWidgetFloatable | QDockWidget.DockWidgetMovable)
+        # 阴影
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(15)
+        shadow.setColor(QColor(0, 0, 0, 100))
+        shadow.setOffset(2, 2)
+        self.minimap.setGraphicsEffect(shadow)
 
-        # 默认将鹰眼图停靠在窗口右侧
-        self.addDockWidget(Qt.RightDockWidgetArea, self.dock_minimap)
+        # 右上角
+        layout = QVBoxLayout(self.viewer)
+        layout.setContentsMargins(0, 0, 0, 0)  # 上边距和右边距各留出 20px
+        layout.addWidget(self.minimap, alignment=Qt.AlignTop | Qt.AlignRight)
 
-        # 绑定双向联动信号（前提是 WSIView 中已写好了 view_rect_changed 信号发射逻辑）
+        # 绑定双向联动信号
         self.viewer.view_rect_changed.connect(self.minimap.update_indicator)
         self.minimap.navigate_requested.connect(self.navigate_main_view)
 
     def navigate_main_view(self, cx, cy):
-        """鹰眼图向主视图发送跳转请求时的槽函数"""
+        """ 鹰眼图向主视图发送跳转请求时的槽函数 """
         self.viewer.centerOn(cx, cy)
         # 手动触发一次高分辨率渲染
         self.viewer._render_high_res_viewport()
+        self.viewer._trigger_view_update()
 
     def export_report(self):
         """" 生成并导出CSV/JSON 格式的结构化报告 """

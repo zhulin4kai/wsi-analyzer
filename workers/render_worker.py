@@ -1,12 +1,16 @@
 from PIL.ImageQt import ImageQt
-from PySide6.QtCore import Signal, QThread, QMutex, QMutexLocker, QWaitCondition
+from PySide6.QtCore import QMutex, QMutexLocker, QThread, QWaitCondition, Signal
 from PySide6.QtGui import QImage
+
+from utils.logger import logger
+
 
 class RenderWorker(QThread):
     """
     独立于主界面的后台渲染线程。
     负责执行极其耗时的 OpenSlide IO 读取和 PIL 转 QImage 像素计算。
     """
+
     # 信号：传递 版本号, 图像数据, X坐标, Y坐标, 放大比例
     image_ready = Signal(int, QImage, int, int, float)
 
@@ -54,7 +58,7 @@ class RenderWorker(QThread):
                     # 3. 将成品图像发回给主 UI 线程
                     self.image_ready.emit(version, qimg, x, y, scale)
                 except Exception as e:
-                    print(f"RenderWorker 发生异常: {e}")
+                    logger.exception(f"RenderWorker 发生异常: {e}")
 
     def stop(self):
         """安全停止线程"""

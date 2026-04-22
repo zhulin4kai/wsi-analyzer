@@ -1,16 +1,24 @@
 from PIL.ImageQt import ImageQt
-from PySide6.QtCore import Qt, QTimer, QRectF, Signal
-from PySide6.QtGui import QPixmap, QPainter
-from PySide6.QtWidgets import (QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QMessageBox)
-from workers import RenderWorker
-from config import RENDER_DEBOUNCE_MS, IDLE_THRESHOLD_MS
+from PySide6.QtCore import QRectF, Qt, QTimer, Signal
+from PySide6.QtGui import QPainter, QPixmap
+from PySide6.QtWidgets import (
+    QGraphicsPixmapItem,
+    QGraphicsScene,
+    QGraphicsView,
+    QMessageBox,
+)
+
+from config import IDLE_THRESHOLD_MS, RENDER_DEBOUNCE_MS
 from core import WSIDataEngine
+from utils.logger import logger
+from workers import RenderWorker
 
 
 class WSIView(QGraphicsView):
     """
     核心视口组件：负责处理鼠标交互（平移、缩放）并按需调度 OpenSlide 渲染
     """
+
     view_rect_changed = Signal(QRectF)
     interaction_started = Signal()
     interaction_finished = Signal()
@@ -35,8 +43,12 @@ class WSIView(QGraphicsView):
 
         # 3. 视图优化设置
         self.setRenderHint(QPainter.Antialiasing)
-        self.setRenderHint(QPainter.SmoothPixmapTransform)  # 开启平滑插值，防止缩放时出现马赛克
-        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)  # 隐藏滚动条，实现类似谷歌地图的纯净画布
+        self.setRenderHint(
+            QPainter.SmoothPixmapTransform
+        )  # 开启平滑插值，防止缩放时出现马赛克
+        self.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarAlwaysOff
+        )  # 隐藏滚动条，实现类似谷歌地图的纯净画布
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
 
         # 缩放锚点：以鼠标指针当前位置为中心进行缩放
@@ -44,7 +56,9 @@ class WSIView(QGraphicsView):
 
         # 4. 后端引擎与状态变量
         self.slide_engine = None
-        self._current_qimg = None  # 保持对当前 QImage 的引用，防止被 Python GC 提前回收引发崩溃
+        self._current_qimg = (
+            None  # 保持对当前 QImage 的引用，防止被 Python GC 提前回收引发崩溃
+        )
 
         # 交互状态
         self._is_panning = False
@@ -74,7 +88,9 @@ class WSIView(QGraphicsView):
         # 只有在完全没有任何交互后，才允许绘制沉重的 AI 画框
         self.idle_timer = QTimer()
         self.idle_timer.setSingleShot(True)
-        self.idle_timer.setInterval(IDLE_THRESHOLD_MS)  # 300ms 不操作，才认为交互真正结束
+        self.idle_timer.setInterval(
+            IDLE_THRESHOLD_MS
+        )  # 300ms 不操作，才认为交互真正结束
         self.idle_timer.timeout.connect(self._on_absolute_idle)
 
     def _mark_interaction(self):
@@ -113,12 +129,15 @@ class WSIView(QGraphicsView):
         current_scale = self.transform().m11()
         target_downsample = 1.0 / current_scale
 
-        loc_x, loc_y, best_level, size_w, size_h, level_downsample = \
+        loc_x, loc_y, best_level, size_w, size_h, level_downsample = (
             self.slide_engine.calculate_render_params(
-                intersected_rect.left(), intersected_rect.top(),
-                intersected_rect.width(), intersected_rect.height(),
-                target_downsample
+                intersected_rect.left(),
+                intersected_rect.top(),
+                intersected_rect.width(),
+                intersected_rect.height(),
+                target_downsample,
             )
+        )
 
         if size_w <= 0 or size_h <= 0:
             finish_interaction_early()
@@ -128,7 +147,14 @@ class WSIView(QGraphicsView):
         # 主线程瞬间执行完毕，继续响应鼠标拖拽。
         self.render_version += 1
         self.render_worker.request_render(
-            self.slide_engine, loc_x, loc_y, best_level, size_w, size_h, level_downsample, self.render_version
+            self.slide_engine,
+            loc_x,
+            loc_y,
+            best_level,
+            size_w,
+            size_h,
+            level_downsample,
+            self.render_version,
         )
 
     def _on_image_ready(self, version, qimg, x, y, scale):
@@ -157,7 +183,7 @@ class WSIView(QGraphicsView):
 
     def closeEvent(self, event):
         """关闭窗口时安全退出线程"""
-        if hasattr(self, 'render_worker'):
+        if hasattr(self, "render_worker"):
             self.render_worker.stop()
         super().closeEvent(event)
 
@@ -175,11 +201,13 @@ class WSIView(QGraphicsView):
         self.resetTransform()
 
         try:
-            thumb_img, downsample_factor = self.slide_engine.get_thumbnail(level_from_last=2)
+            thumb_img, downsample_factor = self.slide_engine.get_thumbnail(
+                level_from_last=2
+            )
             self.bg_layer_item.setPixmap(QPixmap.fromImage(ImageQt(thumb_img)))
             self.bg_layer_item.setScale(downsample_factor)
         except Exception as e:
-            print(f"宏观底图加载失败: {e}")
+            logger.error(f"宏观底图加载失败: {e}")
 
         # 计算初始缩放比例（让整个切片刚好适应当前窗口大小）
         view_rect = self.viewport().rect()
@@ -195,7 +223,8 @@ class WSIView(QGraphicsView):
     # ==================== 模块 B: 交互事件重写 ====================
     def wheelEvent(self, event):
         """重写滚轮事件：实现基于鼠标锚点的平滑缩放"""
-        if not self.slide_engine: return
+        if not self.slide_engine:
+            return
 
         # 如果是连续滚动动作的第一下，触发交互开始信号
         self._mark_interaction()
@@ -299,9 +328,15 @@ class WSIView(QGraphicsView):
         # 目标降采样率 (Downsample) = 1 / 缩放比例。缩小 10 倍，意味着我们需要 downsample 约为 10 的层级
         target_downsample = 1.0 / current_scale
 
-        loc_x, loc_y, best_level, size_w, size_h, level_downsample = self.slide_engine.calculate_render_params(
-            intersected_rect.left(), intersected_rect.top(), intersected_rect.width(), intersected_rect.height(),
-            target_downsample)
+        loc_x, loc_y, best_level, size_w, size_h, level_downsample = (
+            self.slide_engine.calculate_render_params(
+                intersected_rect.left(),
+                intersected_rect.top(),
+                intersected_rect.width(),
+                intersected_rect.height(),
+                target_downsample,
+            )
+        )
 
         if size_w <= 0 or size_h <= 0:
             finish_interaction()
@@ -309,7 +344,14 @@ class WSIView(QGraphicsView):
 
         self.render_version += 1
         self.render_worker.request_render(
-            self.slide_engine, loc_x, loc_y, best_level, size_w, size_h, level_downsample, self.render_version
+            self.slide_engine,
+            loc_x,
+            loc_y,
+            best_level,
+            size_w,
+            size_h,
+            level_downsample,
+            self.render_version,
         )
 
     # ==================== 模块 D: 鹰眼图 ====================
