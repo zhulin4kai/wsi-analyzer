@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
     QGraphicsDropShadowEffect,
     QGraphicsItemGroup,
     QGraphicsRectItem,
+    QInputDialog,
     QLabel,
     QMainWindow,
     QMessageBox,
@@ -65,8 +66,8 @@ class MainWindow(QMainWindow):
         recent_menu = file_menu.addMenu("最近打开的文件")
         recent_menu.setEnabled(False)
         file_menu.addSeparator()
-        settings_action = file_menu.addAction("系统设置")
-        settings_action.setEnabled(False)
+        self.settings_action = file_menu.addAction("系统设置")
+        self.settings_action.triggered.connect(self.open_settings)
         exit_action = file_menu.addAction("退出系统")
         exit_action.setShortcut("Ctrl + Q")
         exit_action.triggered.connect(self.close)
@@ -83,6 +84,27 @@ class MainWindow(QMainWindow):
                 self, "关于", "基于 YOLOv8 的智能 WSI 病理切片辅助诊断系统"
             )
         )
+
+    def open_settings(self):
+        """打开系统设置面板，调整数据库容量限制"""
+        db = DatabaseManager()
+        current_capacity = db.get_max_capacity()
+
+        new_capacity, ok = QInputDialog.getInt(
+            self,
+            "系统设置",
+            "设置本地数据库最大存储容量 (MB):\n超出该容量时将自动清理最旧的分析记录\n最低50MB",
+            value=current_capacity,
+            minValue=50,
+            maxValue=10000,
+            step=50,
+        )
+
+        if ok and new_capacity != current_capacity:
+            db.set_max_capacity(new_capacity)
+            QMessageBox.information(
+                self, "设置成功", f"数据库最大容量已更新为 {new_capacity} MB。"
+            )
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -248,6 +270,7 @@ class MainWindow(QMainWindow):
             return
 
         self.btn_analyze.setEnabled(False)
+        self.settings_action.setEnabled(False)
 
         self.progress_dialog = QProgressDialog(
             "正在进行全片 AI 检测...", None, 0, 100, self
@@ -269,6 +292,7 @@ class MainWindow(QMainWindow):
         self.ai_thread.analysis_finished.connect(self.render_ai_results)
         self.ai_thread.error_occurred.connect(self.handle_ai_error)
         self.ai_thread.finished.connect(lambda: self.btn_analyze.setEnabled(True))
+        self.ai_thread.finished.connect(lambda: self.settings_action.setEnabled(True))
 
         self.progress_dialog.show()
         self.ai_thread.start()

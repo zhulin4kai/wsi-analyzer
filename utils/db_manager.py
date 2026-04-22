@@ -37,8 +37,9 @@ class DatabaseManager:
         self.db_path = db_path
 
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with sqlite3.connect(self.db_path, timeout=5000) as conn:
                 cursor = conn.cursor()
+                cursor.execute("PRAGMA journal_mode=WAL;")
                 # 创建核心数据表
                 # status: 'completed' (已完成) 或 'interrupted' (被中断)
                 cursor.execute("""
@@ -54,24 +55,44 @@ class DatabaseManager:
                         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )
                 """)
+
+                # 配置表，用于存储用户设置
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS settings (
+                        key TEXT PRIMARY KEY,
+                        value TEXT
+                    )
+                """)
+                cursor.execute(
+                    "INSERT OR IGNORE INTO settings (key, value) VALUES ('max_capacity_mb', '150')"
+                )
+
                 conn.commit()
+
+            self.enforce_capacity_limit()
         except Exception as e:
             logger.error(f"数据库初始化失败: {e}")
 
     @staticmethod
     def get_wsi_hash(file_path):
         """
-        基于文件元数据的轻量级哈希算法秒级运算
-        联合要素: 文件绝对路径 + 字节级精确大小 + 最后修改时间戳
+        基于部分文件特征的极速哈希算法（免疫文件重命名和移动）
+        联合要素: 文件头部 1MB 字节的 MD5 + 文件字节级精确大小
         """
         try:
             abs_path = os.path.abspath(file_path)
             file_size = os.path.getsize(abs_path)
-            mtime = os.path.getmtime(abs_path)
-            feature_str = f"{abs_path}_{file_size}_{mtime}"
+
+            # 读取头部最多 1MB 数据进行哈希，速度极快且唯一性有保障
+            chunk_size = min(file_size, 1024 * 1024)
+            with open(abs_path, "rb") as f:
+                header_bytes = f.read(chunk_size)
+
+            header_md5 = hashlib.md5(header_bytes).hexdigest()
+            feature_str = f"{header_md5}_{file_size}"
             return hashlib.md5(feature_str.encode("utf-8")).hexdigest()
         except Exception as e:
-            logger.error(f"获取特征哈希失败: {e}")
+            logger.error(f"获取特征哈希失败 ({file_path}): {e}")
             return None
 
     def save_analysis(
@@ -104,7 +125,7 @@ class DatabaseManager:
         updated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with sqlite3.connect(self.db_path, timeout=5000) as conn:
                 cursor = conn.cursor()
                 cursor.execute(
                     """
@@ -135,6 +156,8 @@ class DatabaseManager:
                 )
                 conn.commit()
                 logger.info(f"已将分析进度存储至数据库 (状态: {status})")
+
+            self.enforce_capacity_limit()
         except Exception as e:
             logger.error(f"保存分析数据到数据库失败: {e}")
 
@@ -149,7 +172,7 @@ class DatabaseManager:
             return None
 
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with sqlite3.connect(self.db_path, timeout=5000) as conn:
                 conn.row_factory = sqlite3.Row  # 使结果支持列名索引
                 cursor = conn.cursor()
                 cursor.execute(
@@ -185,7 +208,7 @@ class DatabaseManager:
             return
 
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with sqlite3.connect(self.db_path, timeout=5000) as conn:
                 cursor = conn.cursor()
                 cursor.execute(
                     "DELETE FROM wsi_analysis WHERE wsi_hash = ?", (wsi_hash,)
@@ -194,3 +217,71 @@ class DatabaseManager:
                 logger.info(f"已清除数据库中的 WSI 记录 (hash: {wsi_hash})")
         except Exception as e:
             logger.error(f"删除分析记录失败: {e}")
+
+    def get_max_capacity(self) -> int:
+        """获取设置的数据库最大存储容量(MB)"""
+        try:
+            with sqlite3.connect(self.db_path, timeout=5000) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT value FROM settings WHERE key = 'max_capacity_mb'"
+                )
+                row = cursor.fetchone()
+                val = int(row[0]) if row else 150
+                return max(50, val)  # 强制最低 50MB
+        except Exception as e:
+            logger.error(f"读取容量设置失败: {e}")
+            return 150
+
+    def set_max_capacity(self, mb: int):
+        """设置数据库最大存储容量(MB)"""
+        mb = max(50, mb)  # 强制限制最低 50MB，防止异常设置导致数据被清空
+        try:
+            with sqlite3.connect(self.db_path, timeout=5000) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "INSERT OR REPLACE INTO settings (key, value) VALUES ('max_capacity_mb', ?)",
+                    (str(mb),),
+                )
+                conn.commit()
+                logger.info(f"已将数据库最大存储容量设置为 {mb} MB")
+            self.enforce_capacity_limit()
+        except Exception as e:
+            logger.error(f"设置容量限制失败: {e}")
+
+    def enforce_capacity_limit(self):
+        """自动容量控制：如果超出限制，则按时间顺序淘汰最旧的分析记录"""
+        try:
+            max_bytes = self.get_max_capacity() * 1024 * 1024
+            if not os.path.exists(self.db_path):
+                return
+
+            while os.path.getsize(self.db_path) > max_bytes:
+                with sqlite3.connect(self.db_path, timeout=5000) as conn:
+                    cursor = conn.cursor()
+                    cursor.execute(
+                        "SELECT wsi_hash FROM wsi_analysis ORDER BY updated_at ASC LIMIT 1"
+                    )
+                    row = cursor.fetchone()
+                    if not row:
+                        break
+
+                    wsi_hash = row[0]
+                    cursor.execute(
+                        "DELETE FROM wsi_analysis WHERE wsi_hash = ?", (wsi_hash,)
+                    )
+                    conn.commit()
+                    logger.info(f"数据库容量超限，已自动淘汰最旧记录: {wsi_hash}")
+
+                # 删除单条后立刻执行 VACUUM 以实际回收文件系统空间
+                # 注意：VACUUM 会锁定数据库，如果并发占用时可能抛出 OperationalError
+                try:
+                    with sqlite3.connect(self.db_path, timeout=5000) as conn:
+                        conn.isolation_level = None  # VACUUM 不能在事务中运行
+                        conn.execute("VACUUM")
+                except sqlite3.OperationalError as ve:
+                    logger.warning(f"VACUUM 当前被占用，稍后重试: {ve}")
+                    break  # 必须立刻跳出循环，否则文件大小不缩小会导致把整张表清空！
+
+        except Exception as e:
+            logger.error(f"执行容量限制清理失败: {e}")
