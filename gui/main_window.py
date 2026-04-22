@@ -14,12 +14,12 @@ from PySide6.QtWidgets import (
     QProgressDialog,
     QPushButton,
     QToolBar,
-    QVBoxLayout
+    QVBoxLayout,
 )
 
 from config import AI_PEN_COLOR, AI_PEN_WIDTH
 from gui.widgets import MinimapView, ReportExporter, WSIView
-from utils import CacheManager
+from utils import DatabaseManager
 from workers import AIAnalysisWorker
 
 
@@ -110,9 +110,11 @@ class MainWindow(QMainWindow):
             if hasattr(self.viewer, "slide_engine") and self.viewer.slide_engine:
                 self.minimap.load_minimap(self.viewer.slide_engine)
 
-            # 本地缓存静默读取
-            cache_data = CacheManager.load_analysis(file_path)
-            if cache_data:
+            # 本地数据库静默读取
+            db = DatabaseManager()
+            cache_data = db.get_analysis(file_path)
+            if cache_data and cache_data.get("status") == "completed":
+                results = cache_data.get("results", [])
                 reply = QMessageBox.question(
                     self,
                     "发现分析缓存",
@@ -120,9 +122,9 @@ class MainWindow(QMainWindow):
                     QMessageBox.Yes | QMessageBox.No,
                 )
                 if reply == QMessageBox.Yes:
-                    self.render_ai_results(cache_data)
+                    self.render_ai_results(results)
                     self.statusBar().showMessage(
-                        f"已从本地缓存加载 {len(cache_data)} 个病灶。"
+                        f"已从本地数据库加载 {len(results)} 个病灶。"
                     )
 
     def render_ai_results(self, results):
@@ -153,7 +155,15 @@ class MainWindow(QMainWindow):
         self.btn_export.setEnabled(len(results) > 0)
 
         if self.current_wsi_path:
-            CacheManager.save_analysis(self.current_wsi_path, results)
+            db = DatabaseManager()
+            db.save_analysis(
+                file_path=self.current_wsi_path,
+                model_path=self.current_model_path or "",
+                status="completed",
+                total_patches=0,
+                processed_patches=0,
+                results=results,
+            )
 
         QMessageBox.information(self, "分析完成", f"共标记 {len(results)} 处疑似病灶。")
 
