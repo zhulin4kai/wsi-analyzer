@@ -1,5 +1,5 @@
 app_icon.ico
-best.pt
+*.pt
 wsi_viewer.spec
 .idea
 .wsi_cache/
