@@ -8,7 +8,8 @@ from utils.logger import logger
 class RenderWorkerSignals(QObject):
     """用于 QRunnable 发射信号的辅助类"""
 
-    image_ready = Signal(int, QImage, int, int, float)
+    # 信号：传递 版本号, level, col, row, 图像数据, X坐标, Y坐标, 放大比例
+    image_ready = Signal(int, int, int, int, QImage, int, int, float)
 
 
 class TileRenderTask(QRunnable):
@@ -18,13 +19,26 @@ class TileRenderTask(QRunnable):
     """
 
     def __init__(
-        self, slide_engine, x, y, level, w, h, scale, version, active_version_func
+        self,
+        slide_engine,
+        level,
+        col,
+        row,
+        x,
+        y,
+        w,
+        h,
+        scale,
+        version,
+        active_version_func,
     ):
         super().__init__()
         self.slide_engine = slide_engine
+        self.level = level
+        self.col = col
+        self.row = row
         self.x = x
         self.y = y
-        self.level = level
         self.w = w
         self.h = h
         self.scale = scale
@@ -53,7 +67,14 @@ class TileRenderTask(QRunnable):
 
             # 3. 将成品图像发回给主 UI 线程
             self.signals.image_ready.emit(
-                self.version, qimg, self.x, self.y, self.scale
+                self.version,
+                self.level,
+                self.col,
+                self.row,
+                qimg,
+                self.x,
+                self.y,
+                self.scale,
             )
         except Exception as e:
             logger.exception(f"TileRenderTask 发生异常: {e}")
@@ -65,8 +86,8 @@ class RenderWorker(QObject):
     负责接收渲染请求并将其分发给 QThreadPool。
     """
 
-    # 信号：传递 版本号, 图像数据, X坐标, Y坐标, 放大比例
-    image_ready = Signal(int, QImage, int, int, float)
+    # 信号：传递 版本号, level, col, row, 图像数据, X坐标, Y坐标, 放大比例
+    image_ready = Signal(int, int, int, int, QImage, int, int, float)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -84,12 +105,22 @@ class RenderWorker(QObject):
     def get_active_version(self):
         return self.active_version
 
-    def request_render(self, slide_engine, x, y, level, w, h, scale, version):
+    def request_render(self, slide_engine, level, col, row, x, y, w, h, scale, version):
         """主线程调用此方法，提交最新的渲染请求"""
         self.active_version = max(self.active_version, version)
 
         task = TileRenderTask(
-            slide_engine, x, y, level, w, h, scale, version, self.get_active_version
+            slide_engine,
+            level,
+            col,
+            row,
+            x,
+            y,
+            w,
+            h,
+            scale,
+            version,
+            self.get_active_version,
         )
         task.signals.image_ready.connect(self.image_ready)
 

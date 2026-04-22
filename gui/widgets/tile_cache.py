@@ -16,6 +16,8 @@ class TileLRUCache:
         self.max_capacity = max_capacity
         # OrderedDict 能够记住字典元素插入的顺序
         self._cache: OrderedDict[Tuple[int, int, int], Any] = OrderedDict()
+        # 动态 Z-index，确保最新的瓦片始终在最上层
+        self._current_z_value = 1
 
     def get(self, key: Tuple[int, int, int]) -> Optional[Any]:
         """
@@ -29,7 +31,14 @@ class TileLRUCache:
 
         # 移动到末尾，表示刚刚被访问过（最近使用）
         self._cache.move_to_end(key)
-        return self._cache[key]
+        item = self._cache[key]
+
+        # 动态提升 Z-index，解决跨层级缩放时的遮挡残影 Bug
+        self._current_z_value += 1
+        if hasattr(item, "setZValue"):
+            item.setZValue(self._current_z_value)
+
+        return item
 
     def put(self, key: Tuple[int, int, int], item: Any) -> Optional[Any]:
         """
@@ -47,6 +56,11 @@ class TileLRUCache:
             self._cache.move_to_end(key)
 
         self._cache[key] = item
+
+        # 赋予最新的 Z-index
+        self._current_z_value += 1
+        if hasattr(item, "setZValue"):
+            item.setZValue(self._current_z_value)
 
         # 检查容量，如果超限则弹出最老的记录（位于字典头部的位置）
         if len(self._cache) > self.max_capacity:

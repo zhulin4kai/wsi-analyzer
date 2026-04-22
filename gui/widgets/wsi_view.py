@@ -13,6 +13,10 @@ from core import WSIDataEngine
 from utils.logger import logger
 from workers import RenderWorker
 
+from .tile_cache import TileLRUCache
+
+TILE_SIZE = 512
+
 
 class WSIView(QGraphicsView):
     """
@@ -35,11 +39,8 @@ class WSIView(QGraphicsView):
         self.bg_layer_item.setZValue(-1)
         self.scene_canvas.addItem(self.bg_layer_item)
 
-        # 2. 核心渲染载体：整个 Scene 中只保留一个 PixmapItem 用于显示当前视口图像
-        # 这样可以绝对避免频繁创建删除 Item 导致的内存泄漏
-        self.viewport_item = QGraphicsPixmapItem()
-        self.viewport_item.setZValue(0)
-        self.scene_canvas.addItem(self.viewport_item)
+        # 2. 核心渲染载体：使用瓦片缓存池
+        self.tile_cache = TileLRUCache(max_capacity=200)
 
         # 3. 视图优化设置
         self.setRenderHint(QPainter.Antialiasing)
@@ -129,54 +130,108 @@ class WSIView(QGraphicsView):
         current_scale = self.transform().m11()
         target_downsample = 1.0 / current_scale
 
-        loc_x, loc_y, best_level, size_w, size_h, level_downsample = (
-            self.slide_engine.calculate_render_params(
-                intersected_rect.left(),
-                intersected_rect.top(),
-                intersected_rect.width(),
-                intersected_rect.height(),
-                target_downsample,
-            )
+        # 获取最适合的层级
+        best_level = self.slide_engine.slide.get_best_level_for_downsample(
+            target_downsample
         )
+        level_downsample = self.slide_engine.slide.level_downsamples[best_level]
+        level_dim = self.slide_engine.slide.level_dimensions[best_level]
 
-        if size_w <= 0 or size_h <= 0:
-            finish_interaction_early()
-            return
+        # 切换层级时隐藏其他层级的旧瓦片，防止跨层缩放时的残影遮挡
+        for key, item in self.tile_cache._cache.items():
+            if key[0] != best_level:
+                item.setVisible(False)
 
-        # 递增版本号，并将沉重的任务丢给后台线程
-        # 主线程瞬间执行完毕，继续响应鼠标拖拽。
+        # 递增版本号，表示发起了一次新的渲染批次
         self.render_version += 1
-        self.render_worker.request_render(
-            self.slide_engine,
-            loc_x,
-            loc_y,
-            best_level,
-            size_w,
-            size_h,
-            level_downsample,
-            self.render_version,
-        )
 
-    def _on_image_ready(self, version, qimg, x, y, scale):
+        # 计算视口覆盖的瓦片网格范围
+        start_col = int((intersected_rect.left() / level_downsample) // TILE_SIZE)
+        end_col = int((intersected_rect.right() / level_downsample) // TILE_SIZE)
+        start_row = int((intersected_rect.top() / level_downsample) // TILE_SIZE)
+        end_row = int((intersected_rect.bottom() / level_downsample) // TILE_SIZE)
+
+        # 限制在实际层级的有效范围内
+        max_col = (level_dim[0] - 1) // TILE_SIZE
+        max_row = (level_dim[1] - 1) // TILE_SIZE
+
+        start_col = max(0, min(start_col, max_col))
+        end_col = max(0, min(end_col, max_col))
+        start_row = max(0, min(start_row, max_row))
+        end_row = max(0, min(end_row, max_row))
+
+        for row in range(start_row, end_row + 1):
+            for col in range(start_col, end_col + 1):
+                key = (best_level, col, row)
+
+                # 检查缓存是否命中
+                cached_item = self.tile_cache.get(key)
+                if cached_item:
+                    # 缓存命中，无需重新读取，只需确保它是可见的
+                    if not cached_item.scene():
+                        self.scene_canvas.addItem(cached_item)
+                    cached_item.setVisible(True)
+                else:
+                    # 缓存未命中，需要派发任务给后台读取
+                    tile_w = TILE_SIZE
+                    tile_h = TILE_SIZE
+
+                    # 处理边缘不完整的瓦片
+                    if col == max_col:
+                        tile_w = level_dim[0] - col * TILE_SIZE
+                    if row == max_row:
+                        tile_h = level_dim[1] - row * TILE_SIZE
+
+                    # 计算在 Level 0 (Scene 绝对坐标系) 中的真实位置
+                    abs_x = col * TILE_SIZE * level_downsample
+                    abs_y = row * TILE_SIZE * level_downsample
+
+                    self.render_worker.request_render(
+                        self.slide_engine,
+                        best_level,
+                        col,
+                        row,
+                        int(abs_x),
+                        int(abs_y),
+                        int(tile_w),
+                        int(tile_h),
+                        level_downsample,
+                        self.render_version,
+                    )
+
+        # 我们只需结束交互。
+        finish_interaction_early()
+
+    def _on_image_ready(self, version, level, col, row, qimg, x, y, scale):
         """
-        当后台线程把图处理好送回来时，主线程进行审查。
+        当后台线程把瓦片处理好送回来时，主线程进行接收。
         """
-        # 结果丢弃
-        # 如果送回来的版本号低于当前版本号，说明用户在渲染期间又动了鼠标。
-        # 这张图已经过期，不进行任何 UI 更新
-        if version != self.render_version:
+        # 结果审查：过期的老任务直接丢弃
+        if version < self.render_version:
             return
 
-        if self._is_panning:
+        key = (level, col, row)
+
+        # 如果已经存在（可能由于并发导致重复请求），不再处理
+        if self.tile_cache.contains(key):
             return
 
-        # 验证通过，更新 UI 显示
+        # 创建 QGraphicsPixmapItem 载体
         pixmap = QPixmap.fromImage(qimg)
-        self.viewport_item.setPixmap(pixmap)
-        self.viewport_item.setPos(x, y)
-        self.viewport_item.setScale(scale)
+        item = QGraphicsPixmapItem(pixmap)
+        item.setPos(x, y)
+        item.setScale(scale)
+        item.setZValue(0)  # 覆盖在宏观底图上
 
-        # 真正的图贴好之后，再结束交互状态，把隐藏的 AI 框重新显示出来
+        # 添加到 Scene
+        self.scene_canvas.addItem(item)
+
+        # 存入 LRU 缓存，并获取可能被淘汰的最老瓦片
+        evicted_item = self.tile_cache.put(key, item)
+        if evicted_item and evicted_item.scene():
+            self.scene_canvas.removeItem(evicted_item)
+
+        # 如果交互本来就结束了，我们只需展示瓦片
         if self._is_interaction:
             self._is_interaction = False
             self.interaction_finished.emit()
@@ -199,6 +254,12 @@ class WSIView(QGraphicsView):
         w, h = self.slide_engine.level_0_dim
         self.scene_canvas.setSceneRect(0, 0, w, h)
         self.resetTransform()
+
+        # 清空旧的瓦片缓存
+        old_items = self.tile_cache.clear()
+        for item in old_items:
+            if item.scene():
+                self.scene_canvas.removeItem(item)
 
         try:
             thumb_img, downsample_factor = self.slide_engine.get_thumbnail(
@@ -328,31 +389,9 @@ class WSIView(QGraphicsView):
         # 目标降采样率 (Downsample) = 1 / 缩放比例。缩小 10 倍，意味着我们需要 downsample 约为 10 的层级
         target_downsample = 1.0 / current_scale
 
-        loc_x, loc_y, best_level, size_w, size_h, level_downsample = (
-            self.slide_engine.calculate_render_params(
-                intersected_rect.left(),
-                intersected_rect.top(),
-                intersected_rect.width(),
-                intersected_rect.height(),
-                target_downsample,
-            )
-        )
-
-        if size_w <= 0 or size_h <= 0:
-            finish_interaction()
-            return
-
-        self.render_version += 1
-        self.render_worker.request_render(
-            self.slide_engine,
-            loc_x,
-            loc_y,
-            best_level,
-            size_w,
-            size_h,
-            level_downsample,
-            self.render_version,
-        )
+        # _render_high_res_viewport 其实和 _request_high_res_render 现在逻辑完全一样
+        # 直接复用即可
+        self._request_high_res_render()
 
     # ==================== 模块 D: 鹰眼图 ====================
     def get_visible_rect(self):
