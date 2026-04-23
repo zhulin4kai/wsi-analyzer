@@ -387,7 +387,7 @@ class MainWindow(QMainWindow):
     def _init_minimap_overlay(self):
         """初始化鹰眼图悬浮层"""
         self.minimap = MinimapView(self.viewer)
-        self.minimap.setFixedSize(250, 200)  # 悬浮窗通常使用固定大小
+        # 尺寸现已由 MinimapView 根据切片比例动态接管计算
 
         # 阴影
         shadow = QGraphicsDropShadowEffect(self)
