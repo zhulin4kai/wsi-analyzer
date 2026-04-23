@@ -30,7 +30,10 @@ class ReportExporter:
             default_name = f"{base_name}_诊断报告.csv"
 
         save_path, filter_type = QFileDialog.getSaveFileName(
-            parent, "导出诊断报告", default_name, "CSV 文件 (*.csv);;JSON 文件 (*.json)"
+            parent,
+            "导出诊断报告",
+            default_name,
+            "CSV 文件 (*.csv);;JSON 文件 (*.json);;GeoJSON 文件 (*.geojson)",
         )
 
         if not save_path:
@@ -84,6 +87,47 @@ class ReportExporter:
                 }
                 with open(save_path, mode="w", encoding="utf-8") as f:
                     json.dump(export_data, f, ensure_ascii=False, indent=4)
+
+            elif save_path.endswith(".geojson"):
+                # GeoJSON 格式导出 (兼容 QuPath 等 WSI 软件)
+                features = []
+                for item in current_ai_results:
+                    b = item["bbox"]
+                    x_min, y_min, x_max, y_max = b[0], b[1], b[2], b[3]
+
+                    # 构造闭合多边形 (起点和终点必须重合)
+                    polygon_coords = [
+                        [x_min, y_min],
+                        [x_max, y_min],
+                        [x_max, y_max],
+                        [x_min, y_max],
+                        [x_min, y_min],
+                    ]
+
+                    # 构建 GeoJSON 的 Feature 对象
+                    feature = {
+                        "type": "Feature",
+                        "geometry": {
+                            "type": "Polygon",
+                            "coordinates": [polygon_coords],  # 注意这里是三层嵌套数组
+                        },
+                        "properties": {
+                            "objectType": "annotation",  # QuPath 识别为标注
+                            "classification": {"name": f"Class {item['class_id']}"},
+                            "measurements": [
+                                {
+                                    "name": "Confidence",
+                                    "value": round(item["confidence"], 4),
+                                }
+                            ],
+                        },
+                    }
+                    features.append(feature)
+
+                geojson_data = {"type": "FeatureCollection", "features": features}
+
+                with open(save_path, mode="w", encoding="utf-8") as f:
+                    json.dump(geojson_data, f, ensure_ascii=False, indent=4)
 
             QMessageBox.information(
                 parent, "导出成功", f"报告已成功保存至:\n{save_path}"
