@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
     QInputDialog,
     QLabel,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QProgressDialog,
     QPushButton,
@@ -265,7 +266,17 @@ class MainWindow(QMainWindow):
         self.btn_export = QPushButton("导出诊断报告")
         self.btn_export.setMinimumHeight(35)
         self.btn_export.setEnabled(False)
-        self.btn_export.clicked.connect(self.export_report)
+
+        # 创建导出格式下拉菜单
+        export_menu = QMenu(self.btn_export)
+        action_csv = export_menu.addAction("导出为 CSV")
+        action_csv.triggered.connect(lambda: self.export_report("csv"))
+        action_json = export_menu.addAction("导出为 JSON")
+        action_json.triggered.connect(lambda: self.export_report("json"))
+        action_geojson = export_menu.addAction("导出为 GeoJSON (QuPath)")
+        action_geojson.triggered.connect(lambda: self.export_report("geojson"))
+        self.btn_export.setMenu(export_menu)
+
         toolbar.addWidget(self.btn_export)
 
         # 用于存储当前切片的最新分析结果
@@ -412,6 +423,8 @@ class MainWindow(QMainWindow):
         self.viewer._render_high_res_viewport()
         self.viewer._trigger_view_update()
 
-    def export_report(self):
-        """生成并导出CSV/JSON 格式的结构化报告"""
-        ReportExporter.export(self, self.current_wsi_path, self.current_ai_results)
+    def export_report(self, fmt="csv"):
+        """生成并导出结构化报告"""
+        ReportExporter.export(
+            self, self.current_wsi_path, self.current_ai_results, export_format=fmt
+        )

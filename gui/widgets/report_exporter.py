@@ -7,8 +7,8 @@ from PySide6.QtWidgets import QFileDialog, QMessageBox
 
 class ReportExporter:
     @staticmethod
-    def export(parent, current_wsi_path, current_ai_results):
-        """生成并导出CSV/JSON 格式的结构化报告"""
+    def export(parent, current_wsi_path, current_ai_results, export_format="csv"):
+        """生成并导出结构化报告"""
         if not current_ai_results:
             QMessageBox.warning(parent, "提示", "暂无分析数据可导出！")
             return
@@ -23,17 +23,29 @@ class ReportExporter:
         max_conf = max_conf_item["confidence"]
         max_conf_bbox = max_conf_item["bbox"]
 
-        # 2. 弹出保存文件对话框
-        default_name = "WSI_AI_Report.csv"
+        # 2. 根据传入的格式确定扩展名和过滤器
+        export_format = export_format.lower()
+        if export_format == "json":
+            ext = ".json"
+            filter_str = "JSON 文件 (*.json)"
+        elif export_format == "geojson":
+            ext = ".geojson"
+            filter_str = "GeoJSON 文件 (*.geojson)"
+        else:
+            ext = ".csv"
+            filter_str = "CSV 文件 (*.csv)"
+
+        # 3. 弹出保存文件对话框
+        default_name = f"WSI_AI_Report{ext}"
         if current_wsi_path:
             base_name = os.path.splitext(os.path.basename(current_wsi_path))[0]
-            default_name = f"{base_name}_诊断报告.csv"
+            default_name = f"{base_name}_诊断报告{ext}"
 
         save_path, filter_type = QFileDialog.getSaveFileName(
             parent,
-            "导出诊断报告",
+            f"导出诊断报告 ({export_format.upper()})",
             default_name,
-            "CSV 文件 (*.csv);;JSON 文件 (*.json);;GeoJSON 文件 (*.geojson)",
+            filter_str,
         )
 
         if not save_path:
