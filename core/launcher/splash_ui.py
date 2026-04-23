@@ -34,7 +34,31 @@ class SplashUI:
                 except Exception:
                     pass
 
+        # 确保任务栏图标分组一致并显示独立图标
+        if os.name == "nt":
+            try:
+                import ctypes
+
+                ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+                    "wsianalyzer.app.v0.0.1"
+                )
+            except Exception:
+                pass
+
         self.root = tk.Tk()
+
+        # 设置任务栏和窗口图标
+        base_dir = os.path.dirname(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        )
+        icon_path = os.path.join(base_dir, "assets", "app_icon.ico")
+        if not os.path.exists(icon_path):
+            icon_path = os.path.join(base_dir, "app_icon.ico")
+        if os.path.exists(icon_path):
+            try:
+                self.root.iconbitmap(icon_path)
+            except Exception:
+                pass
 
         # 移除窗口边框和标题栏
         self.root.overrideredirect(True)

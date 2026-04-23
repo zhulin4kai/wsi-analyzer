@@ -30,7 +30,7 @@ class MainWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("基于 YOLOv8 的智能 WSI 病理切片辅助诊断系统")
+        self.setWindowTitle("智能 WSI 病理切片辅助诊断系统 - WSIAnalyzer")
         self.resize(1440, 900)
 
         # 状态记录
@@ -113,7 +113,7 @@ class MainWindow(QMainWindow):
     def open_file(self):
         """重写父类的打开文件逻辑，以便拦截并记录当前的 SVS 绝对路径"""
         file_path, _ = QFileDialog.getOpenFileName(
-            self, "选择全尺寸病理切片", "", "WSI Files (*.svs *.tif *.ndpi)"
+            self, "选择病理切片", "", "WSI Files (*.svs *.tif *.ndpi)"
         )
 
         if file_path:

@@ -11,6 +11,7 @@ def run_qt_app(ready_event: multiprocessing.Event, msg_queue: multiprocessing.Qu
     通过 msg_queue 实时汇报加载进度给启动器的贴图界面。
     """
     msg_queue.put("正在加载核心框架...")
+    from PySide6.QtGui import QIcon
     from PySide6.QtWidgets import QApplication
 
     from gui.main_window import MainWindow
@@ -24,6 +25,26 @@ def run_qt_app(ready_event: multiprocessing.Event, msg_queue: multiprocessing.Qu
 
     msg_queue.put("正在启动图形界面引擎...")
     app = QApplication(sys.argv)
+
+    # 1. 设置 Windows 任务栏的 AppUserModelID，确保独立显示应用自己的图标而不是 Python 的默认小火箭
+    if os.name == "nt":
+        import ctypes
+
+        try:
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+                "wsianalyzer.app.v0.0.1"
+            )
+        except Exception:
+            pass
+
+    # 2. 设置全局应用图标（作用于窗口左上角标题栏和系统任务栏）
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    icon_path = os.path.join(base_dir, "assets", "app_icon.ico")
+    if not os.path.exists(icon_path):
+        icon_path = os.path.join(base_dir, "app_icon.ico")
+
+    if os.path.exists(icon_path):
+        app.setWindowIcon(QIcon(icon_path))
 
     msg_queue.put("正在构建主窗口...")
     window = MainWindow()
