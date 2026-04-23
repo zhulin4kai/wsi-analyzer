@@ -378,7 +378,14 @@ class MainWindow(QMainWindow):
                 self.ai_thread.cancel()
         else:
             if hasattr(self, "progress_dialog"):
-                self.progress_dialog.show()
+                # 重置进度条以清除内部的 wasCanceled 锁定状态
+                current_val = self.progress_dialog.value()
+                self.progress_dialog.reset()
+                self.progress_dialog.setValue(current_val)
+                # 延迟执行 show()，避开 QProgressDialog 在触发 close 事件后的自动隐藏机制
+                from PySide6.QtCore import QTimer
+
+                QTimer.singleShot(0, self.progress_dialog.show)
 
         self._is_canceling = False
 
