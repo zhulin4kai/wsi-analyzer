@@ -152,6 +152,10 @@ class MainWindow(QMainWindow):
     def render_ai_results(self, results_dict):
         """渲染预测结果"""
         if hasattr(self, "progress_dialog"):
+            try:
+                self.progress_dialog.canceled.disconnect(self.cancel_ai_analysis)
+            except Exception:
+                pass
             self.progress_dialog.close()
 
         results = results_dict.get("results", [])
@@ -339,6 +343,17 @@ class MainWindow(QMainWindow):
         self.ai_thread.start()
 
     def cancel_ai_analysis(self):
+        if getattr(self, "_is_canceling", False):
+            return
+        if (
+            not hasattr(self, "ai_thread")
+            or not self.ai_thread
+            or not self.ai_thread.isRunning()
+        ):
+            return
+
+        self._is_canceling = True
+
         msg_box = QMessageBox(self)
         msg_box.setWindowTitle("取消确认")
         msg_box.setText("确定要中断当前的 AI 分析吗？进度将被保存。")
@@ -350,9 +365,18 @@ class MainWindow(QMainWindow):
         if msg_box.clickedButton() == btn_yes:
             if self.ai_thread and self.ai_thread.isRunning():
                 self.ai_thread.cancel()
+        else:
+            if hasattr(self, "progress_dialog"):
+                self.progress_dialog.show()
+
+        self._is_canceling = False
 
     def handle_ai_error(self, err_msg):
         if hasattr(self, "progress_dialog"):
+            try:
+                self.progress_dialog.canceled.disconnect(self.cancel_ai_analysis)
+            except Exception:
+                pass
             self.progress_dialog.close()
         self.statusBar().showMessage("分析失败或被中断。")
         QMessageBox.critical(self, "AI 引擎错误", err_msg)
