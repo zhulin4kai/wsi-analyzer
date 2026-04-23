@@ -4,6 +4,7 @@ from PySide6.QtCore import QRectF, Qt
 from PySide6.QtGui import QColor, QPen
 from PySide6.QtWidgets import (
     QCheckBox,
+    QDockWidget,
     QFileDialog,
     QGraphicsDropShadowEffect,
     QGraphicsItemGroup,
@@ -20,7 +21,7 @@ from PySide6.QtWidgets import (
 )
 
 from config import AI_PEN_COLOR, AI_PEN_WIDTH
-from gui.widgets import MinimapView, ReportExporter, WSIView
+from gui.widgets import LesionGallery, MinimapView, ReportExporter, WSIView
 from utils import DatabaseManager
 from workers import AIAnalysisWorker
 
@@ -51,6 +52,7 @@ class MainWindow(QMainWindow):
         self._init_menu()
         self._init_ai_ui()
         self._init_minimap_overlay()
+        self._init_gallery_ui()
 
         # 4. 绑定信号
         self.viewer.interaction_started.connect(self._on_interaction_start)
@@ -125,6 +127,9 @@ class MainWindow(QMainWindow):
             self.current_ai_results = []
             if hasattr(self, "btn_export"):
                 self.btn_export.setEnabled(False)  # 禁用导出按钮
+
+            if hasattr(self, "gallery"):
+                self.gallery.clear_gallery()
 
             self.current_wsi_path = file_path
             self.viewer.load_wsi(file_path)
@@ -210,6 +215,9 @@ class MainWindow(QMainWindow):
             QMessageBox.information(
                 self, "分析已中止", f"进度已保存。当前标记 {len(results)} 处疑似病灶。"
             )
+
+        # 开始生成画廊缩略图
+        self.gallery.load_results(self.current_wsi_path, results)
 
     # LOD 动态视觉降级控制
     def _on_interaction_start(self):
@@ -435,3 +443,30 @@ class MainWindow(QMainWindow):
         ReportExporter.export(
             self, self.current_wsi_path, self.current_ai_results, export_format=fmt
         )
+
+    def _init_gallery_ui(self):
+        """初始化右侧高危病灶画廊"""
+        self.gallery = LesionGallery(parent=self)
+        self.gallery.navigate_requested.connect(self._navigate_to_lesion)
+        self.addDockWidget(Qt.RightDockWidgetArea, self.gallery)
+
+    def _navigate_to_lesion(self, cx, cy):
+        """接收画廊靶向信号，瞬间移动主视图到病灶中心并放大"""
+        # 平移视图到病灶中心
+        self.viewer.centerOn(cx, cy)
+
+        # 尝试自动放大到一个较高的倍率以便看清细胞
+        current_scale = self.viewer.transform().m11()
+        target_scale = 1.0  # 修改为一个合理的切片聚焦倍率，避免放大过度出现马赛克
+        if current_scale < target_scale:
+            factor = target_scale / current_scale
+            self.viewer.scale(factor, factor)
+        elif current_scale > target_scale:  # 如果当前放得太大，也缩小回该视角
+            factor = target_scale / current_scale
+            self.viewer.scale(factor, factor)
+
+        # 手动触发局部高清渲染
+        if hasattr(self.viewer, "_render_high_res_viewport"):
+            self.viewer._render_high_res_viewport()
+        if hasattr(self.viewer, "_trigger_view_update"):
+            self.viewer._trigger_view_update()
