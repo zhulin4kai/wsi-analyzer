@@ -2,13 +2,15 @@ import multiprocessing
 import os
 import sys
 
+from core.launcher import AppLauncher
 
-def run_qt_app(ready_event: multiprocessing.Event):
+
+def run_qt_app(ready_event: multiprocessing.Event, msg_queue: multiprocessing.Queue):
     """
     子进程入口：负责加载所有重量级框架（Qt、数据库、AI模型等）。
-    不会阻塞主进程中贴图的显示。
+    通过 msg_queue 实时汇报加载进度给启动器的贴图界面。
     """
-    # 延迟导入重量级模块
+    msg_queue.put("正在加载核心框架...")
     from PySide6.QtWidgets import QApplication
 
     from gui.main_window import MainWindow
@@ -17,19 +19,20 @@ def run_qt_app(ready_event: multiprocessing.Event):
 
     logger.info("========== 智能病理辅助诊断系统启动 ==========")
 
-    # 初始化本地数据库等耗时操作
+    msg_queue.put("正在初始化数据库...")
     DatabaseManager()
 
-    # 启动QtApplication
+    msg_queue.put("正在启动图形界面引擎...")
     app = QApplication(sys.argv)
 
+    msg_queue.put("正在构建主窗口...")
     window = MainWindow()
     window.show()
 
-    # 强制处理Qt的挂起事件，确保主界面真正渲染到屏幕上
+    msg_queue.put("正在完成最终渲染...")
     app.processEvents()
 
-    # 触发交接信号：告诉主进程Qt界面已经准备好，可以关掉贴图了
+    # 触发交接信号：告诉主进程Qt界面已经真正绘制完毕，可以安全关掉贴图了
     ready_event.set()
 
     # 正式进入主程序Qt事件循环
@@ -40,40 +43,22 @@ def run_qt_app(ready_event: multiprocessing.Event):
 
 
 def main():
-    # 1. 创建跨进程事件，用于监控Qt加载状态
-    app_ready_event = multiprocessing.Event()
+    # 获取贴图路径 (支持 assets 资源目录与根目录回退)
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    splash_image_path = os.path.join(base_dir, "assets", "splash.png")
+    if not os.path.exists(splash_image_path):
+        splash_image_path = os.path.join(base_dir, "splash.png")
 
-    # 2. 在后台静默拉起子进程执行重量级加载
-    qt_process = multiprocessing.Process(target=run_qt_app, args=(app_ready_event,))
-    qt_process.start()
-
-    # 3. 主进程毫秒级瞬间拉起Tkinter贴图，实现“点击即显示”
-    splash_image_path = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)), "splash.png"
+    # 实例化工业级启动器，传入UI参数与核心后台任务
+    launcher = AppLauncher(
+        image_path=splash_image_path, heavy_task_func=run_qt_app, width=640, height=360
     )
-    from gui.widgets.splash_screen import TkSplashScreen
 
-    splash = TkSplashScreen(splash_image_path, width=640, height=360)
-
-    # 4. 设置定时轮询：监控子进程是否发出了“绿灯”信号
-    def check_if_ready():
-        # 如果绿灯亮了，或者Qt子进程意外崩溃了
-        if app_ready_event.is_set() or not qt_process.is_alive():
-            splash.close()
-        else:
-            # 否则过 50ms 后再次检查
-            splash.root.after(50, check_if_ready)
-
-    if splash.root:
-        splash.root.after(50, check_if_ready)
-        # 进入Tkinter主循环，保证贴图在后台高负载时永不假死（无未响应）
-        splash.run()
-
-    # 5. 贴图关闭后，主进程在此默默等待用户关闭Qt主窗口
-    qt_process.join()
+    # 阻塞并接管整个软件的启动生命周期
+    launcher.run()
 
 
 if __name__ == "__main__":
-    # Windows下使用multiprocessing必备，防止打包exe后无限创建子进程灾难
+    # Windows下打包exe防多进程炸弹必备
     multiprocessing.freeze_support()
     main()
