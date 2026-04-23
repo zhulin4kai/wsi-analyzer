@@ -70,6 +70,8 @@ class SplashUI:
 
         # 4. 显示窗口
         self.root.deiconify()
+        self.root.lift()  # 将窗口提升到Z-index的最上层
+        self.root.attributes("-topmost", True)  # 再次强制声明最高层级
         self.root.update_idletasks()
         self.root.update()
 
