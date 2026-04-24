@@ -1,8 +1,56 @@
 from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtGui import QIcon, QPixmap
-from PySide6.QtWidgets import QDockWidget, QListWidget, QListWidgetItem
+from PySide6.QtWidgets import (
+    QDockWidget,
+    QHBoxLayout,
+    QLabel,
+    QListWidget,
+    QListWidgetItem,
+    QWidget,
+)
 
 from workers.gallery_worker import GalleryWorker
+
+
+class GalleryItemWidget(QWidget):
+    """自定义的画廊列表项，用于精细控制序号、图片和文本的排版"""
+
+    def __init__(self, index: int, parent=None):
+        super().__init__(parent)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(5, 5, 5, 5)
+        layout.setSpacing(10)  # 控制序号和图片之间的较近距离
+
+        # 1. 序号标签
+        self.lbl_index = QLabel(str(index))
+        font = self.lbl_index.font()
+        font.setBold(True)
+        font.setPointSize(12)
+        self.lbl_index.setFont(font)
+        self.lbl_index.setFixedWidth(25)
+        self.lbl_index.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+
+        # 2. 图片标签 (默认 Loading)
+        self.lbl_image = QLabel("Loading...")
+        self.lbl_image.setFixedSize(128, 128)
+        self.lbl_image.setAlignment(Qt.AlignCenter)
+        self.lbl_image.setStyleSheet(
+            "background-color: #f0f0f0; color: #888; border: 1px solid #ddd;"
+        )
+
+        # 3. 置信度文本标签
+        self.lbl_conf = QLabel("")
+        self.lbl_conf.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+
+        layout.addWidget(self.lbl_index)
+        layout.addWidget(self.lbl_image)
+        layout.addSpacing(15)  # 控制图片和置信度之间的较远距离
+        layout.addWidget(self.lbl_conf)
+        layout.addStretch()
+
+    def set_data(self, pixmap: QPixmap, confidence: float):
+        self.lbl_image.setPixmap(pixmap)
+        self.lbl_conf.setText(f"置信度: {confidence:.2%}")
 
 
 class LesionGallery(QDockWidget):
@@ -20,6 +68,9 @@ class LesionGallery(QDockWidget):
         self.setAllowedAreas(
             Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea | Qt.BottomDockWidgetArea
         )
+
+        # 设置最小宽度，加宽画廊，防止置信度文字被遮挡
+        self.setMinimumWidth(320)
 
         # 初始化垂直列表视图（一行一个，左图右文）
         self.list_widget = QListWidget()
@@ -49,12 +100,16 @@ class LesionGallery(QDockWidget):
 
         # 瞬间创建灰色的占位符 Item
         for i, item in enumerate(top_results):
-            list_item = QListWidgetItem(f"   Top {i + 1}  -  Loading...")
-            # 左对齐，让文字靠在图片右边显示
-            list_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            list_item = QListWidgetItem()
+            # 设置固定高宽，以便容纳 128x128 的图片和外边距 (加宽以防止文字被遮挡)
+            list_item.setSizeHint(QSize(300, 140))
             # 将原始的 bbox 坐标和属性埋入底层，用于后续的跳转与校验
             list_item.setData(Qt.UserRole, item)
             self.list_widget.addItem(list_item)
+
+            # 嵌入自定义的精细排版 Widget
+            custom_widget = GalleryItemWidget(i + 1)
+            self.list_widget.setItemWidget(list_item, custom_widget)
 
         # 启动后台独立异步截图工具，防止阻塞主界面
         self.gallery_worker = GalleryWorker(self.current_wsi_path, top_results)
@@ -74,11 +129,10 @@ class LesionGallery(QDockWidget):
             # 必须验证传回来的结果与 UI 格子底层的原始指纹一致，才允许渲染
             if data and data.get("bbox") == item_data.get("bbox"):
                 pixmap = QPixmap.fromImage(qimg)
-                list_item.setIcon(QIcon(pixmap))
-                # 重新排版文本，使其在一行内水平显示
-                list_item.setText(
-                    f"   Top {idx + 1}  |  置信度: {item_data['confidence']:.2%}"
-                )
+                # 找到该 Item 绑定的自定义 Widget 并更新图像和文字
+                custom_widget = self.list_widget.itemWidget(list_item)
+                if isinstance(custom_widget, GalleryItemWidget):
+                    custom_widget.set_data(pixmap, item_data["confidence"])
 
     def _on_item_clicked(self, item: QListWidgetItem):
         """

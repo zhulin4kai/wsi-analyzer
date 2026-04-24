@@ -1,7 +1,14 @@
 assets/*
 *.pt
-wsi_viewer.spec
+*.spec
 .idea
 .wsi_cache/
 current_wsi_analysis.json
 logs/*.log
+docs/*
+*.pyc
+__pycache__/
+deployment/*
+nuitka-crash-report.xml
+*.db
+.venv
