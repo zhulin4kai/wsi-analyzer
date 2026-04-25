@@ -6,10 +6,10 @@ import numpy as np
 import torch
 import torchvision
 from tqdm import tqdm
-from ultralytics import YOLO
 
 import config
 from core import WSIDataEngine
+from core.model_adapters import ModelAdapterFactory
 from utils import logger
 from utils.db_manager import DatabaseManager
 from utils.hardware_profiler import HardwareProfiler
@@ -86,9 +86,12 @@ class WSIAnalyzer:
 
         self._is_cancelled = False
 
-        # 加载 YOLO 模型
-        logger.info(f"[*] 正在加载 YOLOv8 模型: {model_path}")
-        self.model = YOLO(model_path)
+        # 动态加载并实例化 AI 模型适配器
+        model_type = db.get_setting("ai_model_type", "YOLO")
+        logger.info(f"[*] 正在加载 {model_type} 模型: {model_path}")
+        self.model_adapter = ModelAdapterFactory.create_adapter(
+            model_path, model_type=model_type, patch_size=self.patch_size
+        )
 
         # 加载 WSI 图像（后台线程独立句柄）
         logger.info(f"[*] 正在打开 WSI 文件: {svs_path}")
@@ -178,18 +181,14 @@ class WSIAnalyzer:
                 )
                 batch_imgs.append(patch_rgba.convert("RGB"))
 
-            results = self.model(
-                batch_imgs, verbose=False, device=self.device, conf=self.conf_thresh
+            results = self.model_adapter.predict(
+                batch_imgs, device=self.device, conf_thresh=self.conf_thresh
             )
 
-            for i, result in enumerate(results):
+            for i, (boxes, scores, classes) in enumerate(results):
                 X_min, Y_min = batch_coords[i]
-                if len(result.boxes) == 0:
+                if len(boxes) == 0:
                     continue
-
-                boxes = result.boxes.xyxy.cpu().numpy()
-                scores = result.boxes.conf.cpu().numpy()
-                classes = result.boxes.cls.cpu().numpy()
 
                 for box, score, cls_id in zip(boxes, scores, classes):
                     loc_x1, loc_y1, loc_x2, loc_y2 = box

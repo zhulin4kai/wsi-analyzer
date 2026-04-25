@@ -90,6 +90,7 @@ class MainWindow(QMainWindow):
         """打开系统设置面板，调整数据库容量限制及硬件加速配置"""
         from PySide6.QtWidgets import (
             QCheckBox,
+            QComboBox,
             QDialog,
             QDoubleSpinBox,
             QFormLayout,
@@ -160,6 +161,10 @@ class MainWindow(QMainWindow):
         chk_auto_tune = QCheckBox("开启自动调优 (推荐)")
         chk_auto_tune.setChecked(db.get_auto_tune_enabled())
 
+        combo_model_type = QComboBox()
+        combo_model_type.addItems(["YOLO", "RESNET", "VIT"])
+        combo_model_type.setCurrentText(db.get_setting("ai_model_type", "YOLO"))
+
         spin_patch_size = QSpinBox()
         spin_patch_size.setRange(128, 4096)
         spin_patch_size.setSingleStep(128)
@@ -191,6 +196,7 @@ class MainWindow(QMainWindow):
         )
 
         layout_ai.addRow("", chk_auto_tune)
+        layout_ai.addRow("模型架构 (Architecture):", combo_model_type)
         layout_ai.addRow("切片尺寸 (Patch Size):", spin_patch_size)
         layout_ai.addRow("滑动步长 (Stride):", spin_stride)
         layout_ai.addRow("NMS IOU 阈值:", spin_iou)
@@ -198,12 +204,14 @@ class MainWindow(QMainWindow):
 
         def toggle_ai_inputs():
             is_manual = not chk_auto_tune.isChecked()
-            spin_patch_size.setEnabled(is_manual)
+            is_yolo = combo_model_type.currentText() == "YOLO"
+            spin_patch_size.setEnabled(is_manual or not is_yolo)
             spin_stride.setEnabled(is_manual)
             spin_iou.setEnabled(is_manual)
             spin_conf.setEnabled(is_manual)
 
         chk_auto_tune.clicked.connect(toggle_ai_inputs)
+        combo_model_type.currentTextChanged.connect(toggle_ai_inputs)
         toggle_ai_inputs()
 
         tabs.addTab(tab_ai, "分析参数设置")
@@ -261,6 +269,7 @@ class MainWindow(QMainWindow):
             db.set_setting("ai_stride", stride)
             db.set_setting("ai_nms_iou_thresh", iou)
             db.set_setting("ai_conf_thresh", conf)
+            db.set_setting("ai_model_type", combo_model_type.currentText())
             db.set_auto_tune_enabled(chk_auto_tune.isChecked())
 
             QMessageBox.information(self, "设置成功", "设置已保存。")
