@@ -89,25 +89,167 @@ class MainWindow(QMainWindow):
         )
 
     def open_settings(self):
-        """打开系统设置面板，调整数据库容量限制"""
+        """打开系统设置面板，调整数据库容量限制及硬件加速配置"""
+        from PySide6.QtWidgets import (
+            QDialog,
+            QDoubleSpinBox,
+            QFormLayout,
+            QLabel,
+            QPushButton,
+            QSpinBox,
+            QTabWidget,
+            QVBoxLayout,
+            QWidget,
+        )
+
         db = DatabaseManager()
         current_capacity = db.get_max_capacity()
 
-        new_capacity, ok = QInputDialog.getInt(
-            self,
-            "系统设置",
-            "设置本地数据库最大存储容量 (MB):\n超出该容量时将自动清理最旧的分析记录\n最低50MB",
-            value=current_capacity,
-            minValue=50,
-            maxValue=10000,
-            step=50,
+        dialog = QDialog(self)
+        dialog.setWindowTitle("系统设置")
+        dialog.resize(400, 300)
+
+        layout = QVBoxLayout(dialog)
+        tabs = QTabWidget()
+
+        # 基本设置 Tab
+        tab_basic = QWidget()
+        layout_basic = QFormLayout(tab_basic)
+        import config
+
+        spin_capacity = QSpinBox()
+        spin_capacity.setRange(getattr(config, "DB_MIN_CAPACITY_MB", 50), 10000)
+        spin_capacity.setSingleStep(50)
+        spin_capacity.setValue(current_capacity)
+        layout_basic.addRow("数据库最大容量 (MB):", spin_capacity)
+        tabs.addTab(tab_basic, "基本设置")
+
+        # 性能与硬件加速 Tab
+        tab_perf = QWidget()
+        layout_perf = QFormLayout(tab_perf)
+
+        drive_prefix = ""
+        if self.current_wsi_path:
+            drive_prefix = os.path.splitdrive(os.path.abspath(self.current_wsi_path))[0]
+
+        profile = db.get_system_profile(drive_prefix) if drive_prefix else None
+
+        lbl_device = QLabel(profile.get("device", "未知") if profile else "未知")
+        lbl_io_speed = QLabel(
+            f"{profile.get('io_speed', 0):.2f} MB/s ({profile.get('io_rating', '未知')})"
+            if profile
+            else "未知"
         )
 
-        if ok and new_capacity != current_capacity:
-            db.set_max_capacity(new_capacity)
-            QMessageBox.information(
-                self, "设置成功", f"数据库最大容量已更新为 {new_capacity} MB。"
+        spin_batch = QSpinBox()
+        spin_batch.setRange(1, getattr(config, "BATCH_SIZE_CAP_NVME_SSD", 256))
+        spin_batch.setValue(profile.get("batch_size", 16) if profile else 16)
+
+        layout_perf.addRow("计算设备:", lbl_device)
+        layout_perf.addRow(
+            "当前盘符:", QLabel(drive_prefix if drive_prefix else "未加载文件")
+        )
+        layout_perf.addRow("当前 I/O 速度:", lbl_io_speed)
+        layout_perf.addRow("Batch Size (可手动覆盖):", spin_batch)
+
+        tabs.addTab(tab_perf, "性能与硬件加速")
+
+        # AI 参数设置 Tab
+        tab_ai = QWidget()
+        layout_ai = QFormLayout(tab_ai)
+
+        spin_patch_size = QSpinBox()
+        spin_patch_size.setRange(128, 4096)
+        spin_patch_size.setSingleStep(128)
+        spin_patch_size.setValue(
+            db.get_setting("ai_patch_size", getattr(config, "AI_PATCH_SIZE", 512))
+        )
+
+        spin_stride = QSpinBox()
+        spin_stride.setRange(64, 4096)
+        spin_stride.setSingleStep(64)
+        spin_stride.setValue(
+            db.get_setting("ai_stride", getattr(config, "AI_STRIDE", 400))
+        )
+
+        spin_iou = QDoubleSpinBox()
+        spin_iou.setRange(0.01, 1.0)
+        spin_iou.setSingleStep(0.05)
+        spin_iou.setValue(
+            db.get_setting(
+                "ai_nms_iou_thresh", getattr(config, "AI_NMS_IOU_THRESH", 0.25)
             )
+        )
+
+        spin_conf = QDoubleSpinBox()
+        spin_conf.setRange(0.01, 1.0)
+        spin_conf.setSingleStep(0.05)
+        spin_conf.setValue(
+            db.get_setting("ai_conf_thresh", getattr(config, "AI_CONF_THRESH", 0.5))
+        )
+
+        layout_ai.addRow("切片尺寸 (Patch Size):", spin_patch_size)
+        layout_ai.addRow("滑动步长 (Stride):", spin_stride)
+        layout_ai.addRow("NMS IOU 阈值:", spin_iou)
+        layout_ai.addRow("置信度阈值 (Conf):", spin_conf)
+
+        tabs.addTab(tab_ai, "AI 参数设置")
+
+        layout.addWidget(tabs)
+
+        def on_save_clicked():
+            patch_size = spin_patch_size.value()
+            stride = spin_stride.value()
+            if stride > patch_size:
+                from PySide6.QtWidgets import QMessageBox
+
+                QMessageBox.warning(
+                    dialog,
+                    "参数警告",
+                    f"滑动步长 ({stride}) 大于切片尺寸 ({patch_size})，这会导致在推断时漏掉部分区域！\n请重新设置（建议步长略小于切片尺寸以保证重叠覆盖率）。",
+                )
+                return
+            dialog.accept()
+
+        btn_save = QPushButton("保存")
+        btn_save.clicked.connect(on_save_clicked)
+        layout.addWidget(btn_save)
+
+        if dialog.exec_() == QDialog.Accepted:
+            new_capacity = spin_capacity.value()
+            if new_capacity != current_capacity:
+                db.set_max_capacity(new_capacity)
+
+            if profile and drive_prefix:
+                profile["batch_size"] = spin_batch.value()
+                db.save_system_profile(drive_prefix, profile)
+
+            # 获取并钳制安全边界，防止用户手动输入超限或奇怪的数值
+            patch_size = max(
+                getattr(config, "AI_PATCH_SIZE_MIN", 128),
+                min(
+                    spin_patch_size.value(), getattr(config, "AI_PATCH_SIZE_MAX", 4096)
+                ),
+            )
+            stride = max(
+                getattr(config, "AI_STRIDE_MIN", 64),
+                min(spin_stride.value(), getattr(config, "AI_STRIDE_MAX", 4096)),
+            )
+            iou = max(
+                getattr(config, "AI_NMS_IOU_THRESH_MIN", 0.01),
+                min(spin_iou.value(), getattr(config, "AI_NMS_IOU_THRESH_MAX", 1.0)),
+            )
+            conf = max(
+                getattr(config, "AI_CONF_THRESH_MIN", 0.01),
+                min(spin_conf.value(), getattr(config, "AI_CONF_THRESH_MAX", 1.0)),
+            )
+
+            db.set_setting("ai_patch_size", patch_size)
+            db.set_setting("ai_stride", stride)
+            db.set_setting("ai_nms_iou_thresh", iou)
+            db.set_setting("ai_conf_thresh", conf)
+
+            QMessageBox.information(self, "设置成功", "设置已保存。")
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -135,11 +277,52 @@ class MainWindow(QMainWindow):
             self.viewer.load_wsi(file_path)
             self.statusBar().showMessage(f"已加载: {os.path.basename(file_path)}")
 
+            drive_prefix = os.path.splitdrive(os.path.abspath(file_path))[0]
+            db = DatabaseManager()
+            existing_profile = db.get_system_profile(drive_prefix)
+
+            if existing_profile and "batch_size" in existing_profile:
+                optimal_params = existing_profile
+                io_speed = optimal_params.get("io_speed", 0.0)
+            else:
+                # 第一阶段：隐形 I/O 测速 (Invisible Benchmark)
+                from core.slide_engine import WSIDataEngine
+                from utils.hardware_profiler import HardwareProfiler
+
+                def init_and_thumb(fp):
+                    engine = WSIDataEngine(fp)
+                    img, _ = engine.get_thumbnail()
+                    # 估算像素体积 (bytes)
+                    bytes_size = img.width * img.height * 3
+                    engine.close()
+                    return bytes_size
+
+                io_speed = HardwareProfiler.measure_io_speed(file_path, init_and_thumb)
+
+                device = HardwareProfiler.get_compute_device()
+                _, free_vram = HardwareProfiler.get_vram_info(device)
+                # 假设默认模型大小100MB，实际在切换模型时会重新计算
+                optimal_params = HardwareProfiler.calculate_optimal_params(
+                    io_speed, free_vram, 100.0
+                )
+                optimal_params["io_speed"] = io_speed
+
+                db.save_system_profile(drive_prefix, optimal_params)
+
+            if (
+                hasattr(self.viewer, "tile_cache")
+                and "tile_cache_limit" in optimal_params
+            ):
+                self.viewer.tile_cache.max_capacity = optimal_params["tile_cache_limit"]
+
+            self.statusBar().showMessage(
+                f"已加载: {os.path.basename(file_path)} | I/O: {io_speed:.2f} MB/s | Batch: {optimal_params['batch_size']}"
+            )
+
             if hasattr(self.viewer, "slide_engine") and self.viewer.slide_engine:
                 self.minimap.load_minimap(self.viewer.slide_engine)
 
             # 本地数据库静默读取
-            db = DatabaseManager()
             cache_data = db.get_analysis(file_path)
             if cache_data and cache_data.get("status") == "completed":
                 results = cache_data.get("results", [])
@@ -294,11 +477,41 @@ class MainWindow(QMainWindow):
 
     def select_model(self):
         file_path, _ = QFileDialog.getOpenFileName(
-            self, "选择 YOLO 权重文件", "", "PyTorch Models (*.pt)"
+            self, "选择 AI 模型", "", "Model Files (*.pt *.pth)"
         )
         if file_path:
             self.current_model_path = file_path
             self.lbl_model.setText(f" 当前模型: {os.path.basename(file_path)} ")
+
+            # 风险 3：模型体积动态变化 (Model Switching Overhead)
+            if self.current_wsi_path:
+                from utils.hardware_profiler import HardwareProfiler
+
+                db = DatabaseManager()
+                drive_prefix = os.path.splitdrive(
+                    os.path.abspath(self.current_wsi_path)
+                )[0]
+                profile = db.get_system_profile(drive_prefix)
+
+                if profile and "io_speed" in profile:
+                    model_size_mb = os.path.getsize(file_path) / (1024 * 1024)
+                    device = profile.get(
+                        "device", HardwareProfiler.get_compute_device()
+                    )
+                    _, free_vram = HardwareProfiler.get_vram_info(device)
+
+                    new_params = HardwareProfiler.calculate_optimal_params(
+                        profile["io_speed"], free_vram, model_size_mb
+                    )
+
+                    # 更新配置并持久化
+                    profile["batch_size"] = new_params["batch_size"]
+                    profile["tile_cache_limit"] = new_params["tile_cache_limit"]
+                    db.save_system_profile(drive_prefix, profile)
+
+                    self.statusBar().showMessage(
+                        f"模型已切换: {os.path.basename(file_path)} | 模型大小: {model_size_mb:.1f}MB | 自动调整 Batch Size 至: {new_params['batch_size']}"
+                    )
 
     def start_ai_analysis(self):
         """启动真实后台推断"""

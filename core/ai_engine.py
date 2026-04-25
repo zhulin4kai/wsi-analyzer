@@ -1,4 +1,5 @@
 import json
+import os
 
 import cv2
 import numpy as np
@@ -7,8 +8,11 @@ import torchvision
 from tqdm import tqdm
 from ultralytics import YOLO
 
+import config
 from core import WSIDataEngine
 from utils import logger
+from utils.db_manager import DatabaseManager
+from utils.hardware_profiler import HardwareProfiler
 
 
 class WSIAnalyzer:
@@ -16,21 +20,69 @@ class WSIAnalyzer:
         self,
         svs_path,
         model_path,
-        patch_size=512,
-        stride=400,
-        batch_size=32,
-        nms_iou_thresh=0.3,
-        conf_thresh=0.5,
+        patch_size=None,
+        stride=None,
+        nms_iou_thresh=None,
+        conf_thresh=None,
     ):
         self.svs_path = svs_path
-        self.patch_size = patch_size
-        self.stride = stride
-        self.batch_size = batch_size
-        self.nms_iou_thresh = nms_iou_thresh
-        self.conf_thresh = conf_thresh
+        # 读取并用安全边界过滤异常数值
+        raw_patch_size = (
+            patch_size
+            if patch_size is not None
+            else getattr(config, "AI_PATCH_SIZE", 512)
+        )
+        self.patch_size = max(
+            getattr(config, "AI_PATCH_SIZE_MIN", 128),
+            min(raw_patch_size, getattr(config, "AI_PATCH_SIZE_MAX", 4096)),
+        )
 
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        logger.info(f"[*] 使用计算设备: {self.device}")
+        raw_stride = stride if stride is not None else getattr(config, "AI_STRIDE", 400)
+        self.stride = max(
+            getattr(config, "AI_STRIDE_MIN", 64),
+            min(raw_stride, getattr(config, "AI_STRIDE_MAX", 4096)),
+        )
+
+        # 自动纠正：步长不能大于切片尺寸，否则会引发漏检区域
+        if self.stride > self.patch_size:
+            logger.warning(
+                f"自动纠正: 步长 ({self.stride}) 大于切片尺寸 ({self.patch_size})，已强制截断为 {self.patch_size}。"
+            )
+            self.stride = self.patch_size
+
+        raw_iou = (
+            nms_iou_thresh
+            if nms_iou_thresh is not None
+            else getattr(config, "AI_NMS_IOU_THRESH", 0.25)
+        )
+        self.nms_iou_thresh = max(
+            getattr(config, "AI_NMS_IOU_THRESH_MIN", 0.01),
+            min(raw_iou, getattr(config, "AI_NMS_IOU_THRESH_MAX", 1.0)),
+        )
+
+        raw_conf = (
+            conf_thresh
+            if conf_thresh is not None
+            else getattr(config, "AI_CONF_THRESH", 0.5)
+        )
+        self.conf_thresh = max(
+            getattr(config, "AI_CONF_THRESH_MIN", 0.01),
+            min(raw_conf, getattr(config, "AI_CONF_THRESH_MAX", 1.0)),
+        )
+
+        # 动态拉取环境参数
+        drive_prefix = os.path.splitdrive(os.path.abspath(svs_path))[0]
+        db = DatabaseManager()
+        profile = db.get_system_profile(drive_prefix)
+
+        if profile:
+            self.device = profile.get("device", HardwareProfiler.get_compute_device())
+            self.batch_size = profile.get("batch_size", 16)
+        else:
+            self.device = HardwareProfiler.get_compute_device()
+            self.batch_size = 16
+
+        logger.info(f"[*] 使用计算设备: {self.device}, Batch Size: {self.batch_size}")
 
         self._is_cancelled = False
 
@@ -48,7 +100,9 @@ class WSIAnalyzer:
         self._is_cancelled = True
         logger.info("[*] 收到中止信号，正在安全退出推断循环...")
 
-    def _generate_solid_mask(self, target_level=3):
+    def _generate_solid_mask(self, target_level=None):
+        if target_level is None:
+            target_level = getattr(config, "AI_MASK_TARGET_LEVEL", 3)
         level, dim, downsample_factor = self.slide_engine.get_level_info(target_level)
         thumb_rgba = self.slide_engine.read_region((0, 0), level, dim)
         thumb_rgb = np.array(thumb_rgba.convert("RGB"))
@@ -63,9 +117,9 @@ class WSIAnalyzer:
         )
         solid_mask = np.zeros_like(gray)
 
-        # 过滤掉小于 0.1% 面积的斑点
+        # 过滤掉极小面积的斑点 (默认 0.1%)
         total_area = gray.shape[0] * gray.shape[1]
-        min_area = total_area * 0.001
+        min_area = total_area * getattr(config, "AI_MIN_AREA_RATIO", 0.001)
 
         valid_contours = [cnt for cnt in contours if cv2.contourArea(cnt) > min_area]
         cv2.drawContours(solid_mask, valid_contours, -1, 255, thickness=-1)
@@ -98,15 +152,24 @@ class WSIAnalyzer:
         global_classes = []
         current_processed = 0
 
-        batches = [
-            valid_coords[i : i + self.batch_size]
-            for i in range(0, len(valid_coords), self.batch_size)
-        ]
-
-        # 遍历批次，并向外抛出进度
-        for idx, batch_coords in enumerate(tqdm(batches, desc="推理进度")):
+        # 动态组装批次
+        i = 0
+        pbar = tqdm(total=len(valid_coords), desc="推理进度")
+        while i < len(valid_coords):
             if self._is_cancelled:
                 break
+
+            # 动态显存陷阱 (OOM Illusion) 防护
+            if self.device in ["cuda", "mps"]:
+                _, free_vram = HardwareProfiler.get_vram_info(self.device)
+                if free_vram < (self.batch_size * config.VRAM_PER_TILE_MB + 300.0):
+                    logger.warning(
+                        f"检测到显存极低 ({free_vram:.1f}MB)，触发自适应降级，batch_size 折半！"
+                    )
+                    self.batch_size = max(1, self.batch_size // 2)
+
+            batch_coords = valid_coords[i : i + self.batch_size]
+            i += len(batch_coords)
 
             batch_imgs = []
             for x_min, y_min in batch_coords:
@@ -137,6 +200,7 @@ class WSIAnalyzer:
                     global_classes.append(cls_id)
 
             current_processed += len(batch_coords)
+            pbar.update(len(batch_coords))
 
             # 【核心修改】触发进度条更新
             if progress_callback and total_patches > 0:
@@ -145,6 +209,7 @@ class WSIAnalyzer:
                 )
                 progress_callback(progress_percent)
 
+        pbar.close()
         return global_boxes, global_scores, global_classes, current_processed
 
     def _apply_global_nms(self, global_boxes, global_scores, global_classes):
@@ -191,7 +256,9 @@ class WSIAnalyzer:
         else:
             if status_callback:
                 status_callback("阶段 1/4: 正在提取宏观图像与生成组织掩码...")
-            solid_mask, downsample_factor = self._generate_solid_mask(target_level=3)
+            solid_mask, downsample_factor = self._generate_solid_mask(
+                target_level=getattr(config, "AI_MASK_TARGET_LEVEL", 3)
+            )
 
             if self._is_cancelled:
                 return {
@@ -211,6 +278,23 @@ class WSIAnalyzer:
         if not valid_coords:
             if status_callback:
                 status_callback("错误: 未提取到有效的组织区域。")
+            return {
+                "status": "completed",
+                "results": [],
+                "valid_coords": [],
+                "processed_patches": 0,
+                "total_patches": 0,
+            }
+
+        max_patches = getattr(config, "AI_MAX_PATCHES_LIMIT", 100000)
+        if len(valid_coords) > max_patches:
+            logger.warning(
+                f"生成的图块数量 ({len(valid_coords)}) 超过安全上限 ({max_patches})！"
+            )
+            if status_callback:
+                status_callback(
+                    f"错误: 提取的图像块过多 ({len(valid_coords)} > {max_patches})，请检查并调大滑动步长。"
+                )
             return {
                 "status": "completed",
                 "results": [],

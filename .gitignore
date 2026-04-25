@@ -12,3 +12,4 @@ deployment/*
 nuitka-crash-report.xml
 *.db
 .venv
+*.dist

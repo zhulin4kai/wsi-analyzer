@@ -1,6 +1,8 @@
 from PySide6.QtCore import QThread, Signal
 
+import config
 from core import WSIAnalyzer
+from utils.db_manager import DatabaseManager
 
 
 class AIAnalysisWorker(QThread):
@@ -30,13 +32,21 @@ class AIAnalysisWorker(QThread):
 
             # 1. 实例化真实的分析器
             # (在此处实例化，意味着模型加载在后台线程发生，完全不会卡死主界面)
+            db = DatabaseManager()
+            patch_size = db.get_setting("ai_patch_size", config.AI_PATCH_SIZE)
+            stride = db.get_setting("ai_stride", config.AI_STRIDE)
+            nms_iou_thresh = db.get_setting(
+                "ai_nms_iou_thresh", config.AI_NMS_IOU_THRESH
+            )
+            conf_thresh = db.get_setting("ai_conf_thresh", config.AI_CONF_THRESH)
+
             self.analyzer = WSIAnalyzer(
                 svs_path=self.svs_path,
                 model_path=self.model_path,
-                patch_size=512,
-                stride=400,
-                batch_size=16,  # 如果你的 GPU 显存 >= 8G，建议可以改成 32 或 64
-                nms_iou_thresh=0.25,
+                patch_size=patch_size,
+                stride=stride,
+                nms_iou_thresh=nms_iou_thresh,
+                conf_thresh=conf_thresh,
             )
 
             # 2. 触发核心管线，并注入 Lambda 回调函数进行 UI 信号中转

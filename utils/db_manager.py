@@ -4,11 +4,12 @@ import os
 import sqlite3
 from datetime import datetime
 
+import config
 from utils.logger import logger
 
 # 数据库存储路径配置
-DB_DIR = "data"
-DB_FILE = os.path.join(DB_DIR, "wsi_data.db")
+DB_DIR = getattr(config, "DB_DIR", "data")
+DB_FILE = getattr(config, "DB_FILE", os.path.join(DB_DIR, "wsi_data.db"))
 
 
 class DatabaseManager:
@@ -66,6 +67,19 @@ class DatabaseManager:
                 cursor.execute(
                     "INSERT OR IGNORE INTO settings (key, value) VALUES ('max_capacity_mb', '150')"
                 )
+
+                # 硬件配置与I/O测速缓存表
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS system_profile (
+                        drive_prefix TEXT PRIMARY KEY,
+                        device TEXT,
+                        io_speed REAL,
+                        io_rating TEXT,
+                        batch_size INTEGER,
+                        tile_cache_limit INTEGER,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
 
                 conn.commit()
 
@@ -227,15 +241,56 @@ class DatabaseManager:
                     "SELECT value FROM settings WHERE key = 'max_capacity_mb'"
                 )
                 row = cursor.fetchone()
-                val = int(row[0]) if row else 150
-                return max(50, val)  # 强制最低 50MB
+                val = (
+                    int(row[0])
+                    if row
+                    else getattr(config, "DB_DEFAULT_CAPACITY_MB", 150)
+                )
+                return max(
+                    getattr(config, "DB_MIN_CAPACITY_MB", 50), val
+                )  # 强制最低 50MB
         except Exception as e:
             logger.error(f"读取容量设置失败: {e}")
             return 150
 
+    def get_setting(self, key: str, default: any = None) -> any:
+        """通用读取设置方法，如果数据库中没有则返回 default"""
+        try:
+            with sqlite3.connect(self.db_path, timeout=5000) as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT value FROM settings WHERE key = ?", (key,))
+                row = cursor.fetchone()
+                if row:
+                    val_str = row[0]
+                    if isinstance(default, int):
+                        return int(val_str)
+                    elif isinstance(default, float):
+                        return float(val_str)
+                    return val_str
+                return default
+        except Exception as e:
+            logger.error(f"读取设置 {key} 失败: {e}")
+            return default
+
+    def set_setting(self, key: str, value: any):
+        """通用保存设置方法"""
+        try:
+            with sqlite3.connect(self.db_path, timeout=5000) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                    (key, str(value)),
+                )
+                conn.commit()
+                logger.info(f"已更新设置 {key} = {value}")
+        except Exception as e:
+            logger.error(f"保存设置 {key} 失败: {e}")
+
     def set_max_capacity(self, mb: int):
         """设置数据库最大存储容量(MB)"""
-        mb = max(50, mb)  # 强制限制最低 50MB，防止异常设置导致数据被清空
+        mb = max(
+            getattr(config, "DB_MIN_CAPACITY_MB", 50), mb
+        )  # 强制限制最低 50MB，防止异常设置导致数据被清空
         try:
             with sqlite3.connect(self.db_path, timeout=5000) as conn:
                 cursor = conn.cursor()
@@ -285,3 +340,49 @@ class DatabaseManager:
 
         except Exception as e:
             logger.error(f"执行容量限制清理失败: {e}")
+
+    def save_system_profile(self, drive_prefix: str, profile: dict):
+        try:
+            with sqlite3.connect(self.db_path, timeout=5000) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    INSERT INTO system_profile
+                    (drive_prefix, device, io_speed, io_rating, batch_size, tile_cache_limit, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    ON CONFLICT(drive_prefix) DO UPDATE SET
+                        device=excluded.device,
+                        io_speed=excluded.io_speed,
+                        io_rating=excluded.io_rating,
+                        batch_size=excluded.batch_size,
+                        tile_cache_limit=excluded.tile_cache_limit,
+                        updated_at=CURRENT_TIMESTAMP
+                    """,
+                    (
+                        drive_prefix,
+                        profile.get("device"),
+                        profile.get("io_speed"),
+                        profile.get("io_rating"),
+                        profile.get("batch_size"),
+                        profile.get("tile_cache_limit"),
+                    ),
+                )
+                conn.commit()
+        except Exception as e:
+            logger.error(f"保存 system_profile 失败: {e}")
+
+    def get_system_profile(self, drive_prefix: str) -> dict:
+        try:
+            with sqlite3.connect(self.db_path, timeout=5000) as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT * FROM system_profile WHERE drive_prefix = ?",
+                    (drive_prefix,),
+                )
+                row = cursor.fetchone()
+                if row:
+                    return dict(row)
+        except Exception as e:
+            logger.error(f"读取 system_profile 失败: {e}")
+        return None
