@@ -40,6 +40,22 @@ class AIAnalysisWorker(QThread):
             )
             conf_thresh = db.get_setting("ai_conf_thresh", config.AI_CONF_THRESH)
 
+            if db.get_auto_tune_enabled():
+                import os
+
+                from utils.hardware_profiler import HardwareProfiler
+
+                drive_prefix = os.path.splitdrive(os.path.abspath(self.svs_path))[0]
+                profile = db.get_system_profile(drive_prefix)
+                io_speed = profile.get("io_speed", 50.0) if profile else 50.0
+                model_size_mb = os.path.getsize(self.model_path) / (1024 * 1024)
+
+                auto_params = HardwareProfiler.calculate_auto_tune_params(
+                    io_speed, patch_size, model_size_mb
+                )
+                stride = auto_params["stride"]
+                conf_thresh = auto_params["conf_thresh"]
+
             self.analyzer = WSIAnalyzer(
                 svs_path=self.svs_path,
                 model_path=self.model_path,

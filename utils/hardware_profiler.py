@@ -1,14 +1,9 @@
-import os
 import time
 
 import psutil
+import torch
 
 import config
-
-try:
-    import torch
-except ImportError:
-    torch = None
 
 
 class HardwareProfiler:
@@ -87,13 +82,13 @@ class HardwareProfiler:
             io_speed_mbps = (thumbnail_bytes / (1024 * 1024)) / elapsed_sec
             return io_speed_mbps
 
-        except Exception as e:
+        except Exception as _e:
             # 如果测速失败，返回一个保守的安全默认值 (20 MB/s)
-            return 20.0
+            return 20
 
     @staticmethod
     def calculate_optimal_params(
-        io_speed: float, free_vram: float, model_size: float, total_ram: float = None
+        io_speed: float, free_vram: float, model_size: float, total_ram: float = 0.0
     ) -> dict:
         """
         第二阶段：启发式参数计算引擎 (Heuristic Engine)
@@ -102,10 +97,10 @@ class HardwareProfiler:
         :param io_speed: I/O 读取速度 (MB/s)
         :param free_vram: 可用显存 (MB)
         :param model_size: 模型文件物理大小 (MB)
-        :param total_ram: 系统物理总内存 (MB)，若为 None 则自动获取
+        :param total_ram: 系统物理总内存 (MB)，若为 0.0 则自动获取
         :return: dict 包含 'batch_size' 和 'tile_cache_limit'
         """
-        if total_ram is None:
+        if total_ram == 0.0:
             total_ram, _ = HardwareProfiler.get_system_ram_info()
 
         # 1. 计算理论显存上限
@@ -162,6 +157,27 @@ class HardwareProfiler:
             "device": HardwareProfiler.get_compute_device(),
             "io_rating": HardwareProfiler._rate_io_speed(io_speed),
         }
+
+    @staticmethod
+    def calculate_auto_tune_params(
+        io_speed: float, patch_size: int, model_size: float
+    ) -> dict:
+        """根据进化后的综合测速，推算最佳滑动步长重叠率与置信度"""
+        # 步长自适应
+        if io_speed < config.IO_SPEED_SATA_SSD_MBPS:
+            stride = int(patch_size * config.AUTO_STRIDE_RATIO_LOW)
+        elif io_speed < config.IO_SPEED_NORMAL_SSD_MBPS:
+            stride = int(patch_size * config.AUTO_STRIDE_RATIO_MID)
+        else:
+            stride = int(patch_size * config.AUTO_STRIDE_RATIO_HIGH)
+
+        # 置信度自适应 (大于 100MB 视为大模型)
+        if model_size > 100.0:
+            conf_thresh = 0.5
+        else:
+            conf_thresh = 0.35
+
+        return {"stride": stride, "conf_thresh": conf_thresh}
 
     @staticmethod
     def _rate_io_speed(io_speed: float) -> str:

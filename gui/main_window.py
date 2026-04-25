@@ -83,14 +83,13 @@ class MainWindow(QMainWindow):
         help_menu = menubar.addMenu("帮助")
         about_action = help_menu.addAction("关于系统")
         about_action.triggered.connect(
-            lambda: QMessageBox.about(
-                self, "关于", "基于 YOLOv8 的智能 WSI 病理切片辅助诊断系统"
-            )
+            lambda: QMessageBox.about(self, "关于", "智能 WSI 病理切片辅助诊断系统")
         )
 
     def open_settings(self):
         """打开系统设置面板，调整数据库容量限制及硬件加速配置"""
         from PySide6.QtWidgets import (
+            QCheckBox,
             QDialog,
             QDoubleSpinBox,
             QFormLayout,
@@ -158,6 +157,9 @@ class MainWindow(QMainWindow):
         tab_ai = QWidget()
         layout_ai = QFormLayout(tab_ai)
 
+        chk_auto_tune = QCheckBox("开启自动调优 (推荐)")
+        chk_auto_tune.setChecked(db.get_auto_tune_enabled())
+
         spin_patch_size = QSpinBox()
         spin_patch_size.setRange(128, 4096)
         spin_patch_size.setSingleStep(128)
@@ -188,12 +190,23 @@ class MainWindow(QMainWindow):
             db.get_setting("ai_conf_thresh", getattr(config, "AI_CONF_THRESH", 0.5))
         )
 
+        layout_ai.addRow("", chk_auto_tune)
         layout_ai.addRow("切片尺寸 (Patch Size):", spin_patch_size)
         layout_ai.addRow("滑动步长 (Stride):", spin_stride)
         layout_ai.addRow("NMS IOU 阈值:", spin_iou)
         layout_ai.addRow("置信度阈值 (Conf):", spin_conf)
 
-        tabs.addTab(tab_ai, "AI 参数设置")
+        def toggle_ai_inputs():
+            is_manual = not chk_auto_tune.isChecked()
+            spin_patch_size.setEnabled(is_manual)
+            spin_stride.setEnabled(is_manual)
+            spin_iou.setEnabled(is_manual)
+            spin_conf.setEnabled(is_manual)
+
+        chk_auto_tune.clicked.connect(toggle_ai_inputs)
+        toggle_ai_inputs()
+
+        tabs.addTab(tab_ai, "分析参数设置")
 
         layout.addWidget(tabs)
 
@@ -248,6 +261,7 @@ class MainWindow(QMainWindow):
             db.set_setting("ai_stride", stride)
             db.set_setting("ai_nms_iou_thresh", iou)
             db.set_setting("ai_conf_thresh", conf)
+            db.set_auto_tune_enabled(chk_auto_tune.isChecked())
 
             QMessageBox.information(self, "设置成功", "设置已保存。")
 
@@ -281,33 +295,53 @@ class MainWindow(QMainWindow):
             db = DatabaseManager()
             existing_profile = db.get_system_profile(drive_prefix)
 
-            if existing_profile and "batch_size" in existing_profile:
-                optimal_params = existing_profile
-                io_speed = optimal_params.get("io_speed", 0.0)
+            # 第一阶段：隐形 I/O 测速 (Invisible Benchmark)
+            import config
+            from core.slide_engine import WSIDataEngine
+            from utils.hardware_profiler import HardwareProfiler
+
+            def init_and_thumb(fp):
+                engine = WSIDataEngine(fp)
+                img, _ = engine.get_thumbnail()
+                # 估算像素体积 (bytes)
+                bytes_size = img.width * img.height * 3
+                engine.close()
+                return bytes_size
+
+            new_io_speed = HardwareProfiler.measure_io_speed(file_path, init_and_thumb)
+
+            if existing_profile and "io_speed" in existing_profile:
+                # 使用 EMA (指数移动平均) 进化算法
+                old_io_speed = existing_profile["io_speed"]
+                io_speed = new_io_speed * getattr(
+                    config, "EMA_ALPHA_NEW", 0.3
+                ) + old_io_speed * getattr(config, "EMA_ALPHA_OLD", 0.7)
+                evol_count_key = f"evol_count_{drive_prefix}"
+                evolution_count = int(db.get_setting(evol_count_key, 1)) + 1
+                db.set_setting(evol_count_key, evolution_count)
             else:
-                # 第一阶段：隐形 I/O 测速 (Invisible Benchmark)
-                from core.slide_engine import WSIDataEngine
-                from utils.hardware_profiler import HardwareProfiler
+                io_speed = new_io_speed
+                evolution_count = 1
+                db.set_setting(f"evol_count_{drive_prefix}", 1)
 
-                def init_and_thumb(fp):
-                    engine = WSIDataEngine(fp)
-                    img, _ = engine.get_thumbnail()
-                    # 估算像素体积 (bytes)
-                    bytes_size = img.width * img.height * 3
-                    engine.close()
-                    return bytes_size
+            device = HardwareProfiler.get_compute_device()
+            _, free_vram = HardwareProfiler.get_vram_info(device)
 
-                io_speed = HardwareProfiler.measure_io_speed(file_path, init_and_thumb)
+            # 假设默认模型大小100MB，实际在切换模型时会重新计算
+            optimal_params = HardwareProfiler.calculate_optimal_params(
+                io_speed, free_vram, 100.0
+            )
+            optimal_params["io_speed"] = io_speed
 
-                device = HardwareProfiler.get_compute_device()
-                _, free_vram = HardwareProfiler.get_vram_info(device)
-                # 假设默认模型大小100MB，实际在切换模型时会重新计算
-                optimal_params = HardwareProfiler.calculate_optimal_params(
-                    io_speed, free_vram, 100.0
-                )
-                optimal_params["io_speed"] = io_speed
+            # 如果用户未开启智能调优且之前有手动设定的 batch_size，予以保留
+            if (
+                existing_profile
+                and "batch_size" in existing_profile
+                and not db.get_auto_tune_enabled()
+            ):
+                optimal_params["batch_size"] = existing_profile["batch_size"]
 
-                db.save_system_profile(drive_prefix, optimal_params)
+            db.save_system_profile(drive_prefix, optimal_params)
 
             if (
                 hasattr(self.viewer, "tile_cache")
@@ -316,7 +350,7 @@ class MainWindow(QMainWindow):
                 self.viewer.tile_cache.max_capacity = optimal_params["tile_cache_limit"]
 
             self.statusBar().showMessage(
-                f"已加载: {os.path.basename(file_path)} | I/O: {io_speed:.2f} MB/s | Batch: {optimal_params['batch_size']}"
+                f"已加载: {os.path.basename(file_path)} | 综合解码性能: {io_speed:.2f} MB/s (已基于 {evolution_count} 次使用进化) | Batch: {optimal_params['batch_size']}"
             )
 
             if hasattr(self.viewer, "slide_engine") and self.viewer.slide_engine:
@@ -483,11 +517,25 @@ class MainWindow(QMainWindow):
             self.current_model_path = file_path
             self.lbl_model.setText(f" 当前模型: {os.path.basename(file_path)} ")
 
+            db = DatabaseManager()
+            if db.get_auto_tune_enabled() and file_path.endswith(".pt"):
+                try:
+                    from ultralytics import YOLO
+
+                    model = YOLO(file_path)
+                    imgsz = model.model.args.get("imgsz")
+                    if isinstance(imgsz, int):
+                        db.set_setting("ai_patch_size", imgsz)
+                        self.statusBar().showMessage(
+                            f"智能调优: 已从 YOLO 模型提取并锁定 Patch Size = {imgsz}"
+                        )
+                except Exception:
+                    pass
+
             # 风险 3：模型体积动态变化 (Model Switching Overhead)
             if self.current_wsi_path:
                 from utils.hardware_profiler import HardwareProfiler
 
-                db = DatabaseManager()
                 drive_prefix = os.path.splitdrive(
                     os.path.abspath(self.current_wsi_path)
                 )[0]
