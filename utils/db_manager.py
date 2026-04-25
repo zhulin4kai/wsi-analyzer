@@ -5,6 +5,7 @@ import sqlite3
 from datetime import datetime
 
 import config
+from utils.db_schema import DDL_STATEMENTS, SETTINGS_DEFAULTS
 from utils.logger import logger
 
 # 数据库存储路径配置
@@ -41,45 +42,17 @@ class DatabaseManager:
             with sqlite3.connect(self.db_path, timeout=5000) as conn:
                 cursor = conn.cursor()
                 cursor.execute("PRAGMA journal_mode=WAL;")
-                # 创建核心数据表
-                # status: 'completed' (已完成) 或 'interrupted' (被中断)
-                cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS wsi_analysis (
-                        wsi_hash TEXT PRIMARY KEY,
-                        file_path TEXT,
-                        model_path TEXT,
-                        status TEXT,
-                        total_patches INTEGER,
-                        processed_patches INTEGER,
-                        results_json TEXT,
-                        valid_coords_json TEXT,
-                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                    )
-                """)
 
-                # 配置表，用于存储用户设置
-                cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS settings (
-                        key TEXT PRIMARY KEY,
-                        value TEXT
-                    )
-                """)
-                cursor.execute(
-                    "INSERT OR IGNORE INTO settings (key, value) VALUES ('max_capacity_mb', '150')"
-                )
+                # 创建所有数据表（DDL 定义见 utils/db_schema.py）
+                for ddl in DDL_STATEMENTS:
+                    cursor.execute(ddl)
 
-                # 硬件配置与I/O测速缓存表
-                cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS system_profile (
-                        drive_prefix TEXT PRIMARY KEY,
-                        device TEXT,
-                        io_speed REAL,
-                        io_rating TEXT,
-                        batch_size INTEGER,
-                        tile_cache_limit INTEGER,
-                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                # 写入默认配置（已存在的行不会被覆盖）
+                for key, value in SETTINGS_DEFAULTS:
+                    cursor.execute(
+                        "INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)",
+                        (key, value),
                     )
-                """)
 
                 conn.commit()
 
@@ -285,6 +258,15 @@ class DatabaseManager:
                 logger.info(f"已更新设置 {key} = {value}")
         except Exception as e:
             logger.error(f"保存设置 {key} 失败: {e}")
+
+    def get_auto_tune_enabled(self) -> bool:
+        """获取是否开启 AI 智能调优"""
+        val = self.get_setting("auto_tune_enabled", "True")
+        return str(val).lower() == "true"
+
+    def set_auto_tune_enabled(self, enabled: bool):
+        """设置是否开启 AI 智能调优"""
+        self.set_setting("auto_tune_enabled", str(enabled))
 
     def set_max_capacity(self, mb: int):
         """设置数据库最大存储容量(MB)"""
