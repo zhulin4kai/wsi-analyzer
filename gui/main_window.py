@@ -87,7 +87,7 @@ class MainWindow(QMainWindow):
         )
 
     def open_settings(self):
-        """打开系统设置面板，调整数据库容量限制及硬件加速配置"""
+        """打开系统设置面板"""
         from PySide6.QtWidgets import (
             QCheckBox,
             QComboBox,
@@ -162,7 +162,7 @@ class MainWindow(QMainWindow):
         chk_auto_tune.setChecked(db.get_auto_tune_enabled())
 
         combo_model_type = QComboBox()
-        combo_model_type.addItems(["YOLO", "RESNET", "VIT"])
+        combo_model_type.addItems(["YOLO", "ONNX"])
         combo_model_type.setCurrentText(db.get_setting("ai_model_type", "YOLO"))
 
         spin_patch_size = QSpinBox()
@@ -227,7 +227,7 @@ class MainWindow(QMainWindow):
                 QMessageBox.warning(
                     dialog,
                     "参数警告",
-                    f"滑动步长 ({stride}) 大于切片尺寸 ({patch_size})，这会导致在推断时漏掉部分区域！\n请重新设置（建议步长略小于切片尺寸以保证重叠覆盖率）。",
+                    f"滑动步长 ({stride}) 大于切片尺寸 ({patch_size})，可能导致推断区域遗漏。\n建议步长小于或等于切片尺寸。",
                 )
                 return
             dialog.accept()
@@ -245,7 +245,7 @@ class MainWindow(QMainWindow):
                 profile["batch_size"] = spin_batch.value()
                 db.save_system_profile(drive_prefix, profile)
 
-            # 获取并钳制安全边界，防止用户手动输入超限或奇怪的数值
+            # 获取并应用安全边界
             patch_size = max(
                 getattr(config, "AI_PATCH_SIZE_MIN", 128),
                 min(
@@ -278,14 +278,14 @@ class MainWindow(QMainWindow):
         super().resizeEvent(event)
 
     def open_file(self):
-        """重写父类的打开文件逻辑，以便拦截并记录当前的 SVS 绝对路径"""
+        """打开文件并记录路径"""
         file_path, _ = QFileDialog.getOpenFileName(
             self, "选择病理切片", "", "WSI Files (*.svs *.tif *.ndpi)"
         )
 
         if file_path:
-            # 状态安全重置
-            # 切换切片前，务必清空上一张切片留下的 AI 预测框，防止空间坐标错位
+            # 状态重置
+            # 切换切片前，清空 AI 预测框
             for item in self.ai_layer_group.childItems():
                 self.ai_layer_group.removeFromGroup(item)
                 self.viewer.scene_canvas.removeItem(item)
@@ -304,7 +304,7 @@ class MainWindow(QMainWindow):
             db = DatabaseManager()
             existing_profile = db.get_system_profile(drive_prefix)
 
-            # 第一阶段：隐形 I/O 测速 (Invisible Benchmark)
+            # I/O 测速 (I/O Benchmark)
             import config
             from core.slide_engine import WSIDataEngine
             from utils.hardware_profiler import HardwareProfiler
@@ -322,12 +322,22 @@ class MainWindow(QMainWindow):
             if existing_profile and "io_speed" in existing_profile:
                 # 使用 EMA (指数移动平均) 进化算法
                 old_io_speed = existing_profile["io_speed"]
-                io_speed = new_io_speed * getattr(
-                    config, "EMA_ALPHA_NEW", 0.3
-                ) + old_io_speed * getattr(config, "EMA_ALPHA_OLD", 0.7)
-                evol_count_key = f"evol_count_{drive_prefix}"
-                evolution_count = int(db.get_setting(evol_count_key, 1)) + 1
-                db.set_setting(evol_count_key, evolution_count)
+
+                # 突变检测：如果最新测速显著偏离历史值，则重置 EMA
+                if (
+                    new_io_speed > old_io_speed * 3.0
+                    or new_io_speed < old_io_speed * 0.2
+                ):
+                    io_speed = new_io_speed
+                    evolution_count = 1
+                    db.set_setting(f"evol_count_{drive_prefix}", 1)
+                else:
+                    io_speed = new_io_speed * getattr(
+                        config, "EMA_ALPHA_NEW", 0.3
+                    ) + old_io_speed * getattr(config, "EMA_ALPHA_OLD", 0.7)
+                    evol_count_key = f"evol_count_{drive_prefix}"
+                    evolution_count = int(db.get_setting(evol_count_key, 1)) + 1
+                    db.set_setting(evol_count_key, evolution_count)
             else:
                 io_speed = new_io_speed
                 evolution_count = 1
@@ -336,7 +346,7 @@ class MainWindow(QMainWindow):
             device = HardwareProfiler.get_compute_device()
             _, free_vram = HardwareProfiler.get_vram_info(device)
 
-            # 假设默认模型大小100MB，实际在切换模型时会重新计算
+            # 默认模型大小100MB，切换模型时重新计算
             optimal_params = HardwareProfiler.calculate_optimal_params(
                 io_speed, free_vram, 100.0
             )
@@ -408,7 +418,7 @@ class MainWindow(QMainWindow):
                 QRectF(x_min, y_min, x_max - x_min, y_max - y_min)
             )
 
-            # 化妆笔模式保证在全景缩小（Level 0 大尺寸）下依然可见
+            # 固定线宽模式保证在全景缩小下可见
             pen = QPen(QColor(*AI_PEN_COLOR))
             pen.setWidth(AI_PEN_WIDTH)
             pen.setCosmetic(True)
@@ -445,24 +455,18 @@ class MainWindow(QMainWindow):
         # 开始生成画廊缩略图
         self.gallery.load_results(self.current_wsi_path, results)
 
-    # LOD 动态视觉降级控制
+    # LOD 动态视觉控制
     def _on_interaction_start(self):
-        """
-        槽函数：交互开始 (鼠标按下或滚轮初次滚动)
-        动作：静默隐藏重度图层，释放 Qt C++ 底层的重绘压力。
-        """
-        # 记录隐藏前的真实意图（因为用户可能本来就把框关掉了）
+        """交互开始，隐藏部分图层以提升渲染性能"""
+        # 记录隐藏前的显示状态
         self._was_ai_visible = self.chk_show_ai.isChecked()
 
-        # 强制隐藏包含成千上万个矩形的 AI 图层组
+        # 隐藏 AI 图层组
         self.ai_layer_group.setVisible(False)
 
     def _on_interaction_finish(self):
-        """
-        槽函数：交互结束 (防抖定时器结束，且高清切图渲染完毕)
-        动作：根据记忆的状态，恢复图层显示。
-        """
-        # 只有在用户原本期望显示的情况下，才恢复画框
+        """交互结束，恢复图层显示"""
+        # 根据交互前的状态恢复显示
         if self._was_ai_visible:
             self.ai_layer_group.setVisible(True)
 
@@ -520,7 +524,7 @@ class MainWindow(QMainWindow):
 
     def select_model(self):
         file_path, _ = QFileDialog.getOpenFileName(
-            self, "选择 AI 模型", "", "Model Files (*.pt *.pth)"
+            self, "选择 AI 模型", "", "Model Files (*.pt *.onnx *.pth)"
         )
         if file_path:
             self.current_model_path = file_path
@@ -536,7 +540,22 @@ class MainWindow(QMainWindow):
                     if isinstance(imgsz, int):
                         db.set_setting("ai_patch_size", imgsz)
                         self.statusBar().showMessage(
-                            f"智能调优: 已从 YOLO 模型提取并锁定 Patch Size = {imgsz}"
+                            f"智能调优: 已根据 YOLO 模型设置 Patch Size = {imgsz}"
+                        )
+                except Exception:
+                    pass
+            elif db.get_auto_tune_enabled() and file_path.endswith(".onnx"):
+                try:
+                    import onnxruntime as ort
+
+                    session = ort.InferenceSession(
+                        file_path, providers=["CPUExecutionProvider"]
+                    )
+                    input_shape = session.get_inputs()[0].shape
+                    if len(input_shape) >= 4 and isinstance(input_shape[2], int):
+                        db.set_setting("ai_patch_size", input_shape[2])
+                        self.statusBar().showMessage(
+                            f"智能调优: 已根据 ONNX 模型设置 Patch Size = {input_shape[2]}"
                         )
                 except Exception:
                     pass
@@ -571,7 +590,7 @@ class MainWindow(QMainWindow):
                     )
 
     def start_ai_analysis(self):
-        """启动真实后台推断"""
+        """启动后台推断"""
         if not self.current_wsi_path:
             QMessageBox.warning(self, "警告", "请先通过'文件'菜单打开一个 WSI 切片！")
             return

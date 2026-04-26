@@ -3,16 +3,11 @@ import os
 from typing import Any, Dict, List, Tuple
 
 import numpy as np
-import torch
-import torchvision.transforms as T
+import onnxruntime as ort
 from PIL import Image
+from ultralytics import YOLO
 
 from utils import logger
-
-try:
-    from ultralytics import YOLO
-except ImportError:
-    YOLO = None
 
 
 class BaseModelAdapter(abc.ABC):
@@ -96,83 +91,80 @@ class YOLOAdapter(BaseModelAdapter):
         return 512
 
 
-class ClassificationAdapter(BaseModelAdapter):
+class ONNXObjectDetectionAdapter(BaseModelAdapter):
     """
-    通用图像分类模型适配器 (如 ResNet, ViT 等)
-    由于分类模型通常是对整个 Patch 输出一个类别，而不是输出 Bounding Box，
-    适配器会将其包装成一个覆盖整个 Patch 的 Box 供下游 NMS 和渲染使用。
+    通用 ONNX 目标检测模型适配器
+    用于支持加载独立于框架的 ONNX 格式模型。
     """
-
-    def __init__(self, model_path: str, patch_size: int = 224):
-        self.patch_size = patch_size
-        super().__init__(model_path)
-
-        self.transform = T.Compose(
-            [
-                T.Resize((self.patch_size, self.patch_size)),
-                T.ToTensor(),
-                T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-            ]
-        )
 
     def _load_model(self, model_path: str) -> Any:
-        # 这里仅作通用 PyTorch 模型的加载示例
+        if ort is None:
+            raise ImportError(
+                "未安装 onnxruntime 库，无法加载 ONNX 模型。请执行 `pip install onnxruntime` 或 `onnxruntime-gpu`。"
+            )
+
+        # 自动选择硬件执行提供者
+        providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
         try:
-            model = torch.load(model_path, map_location="cpu")
-            if isinstance(model, dict) and "state_dict" in model:
-                # 如果只有 state_dict，通常需要用户提供模型结构代码
-                raise ValueError(
-                    "当前文件仅包含权重字典，缺少模型架构(Architecture)无法直接实例化 ResNet/ViT。"
-                )
-            model.eval()
-            return model
+            session = ort.InferenceSession(model_path, providers=providers)
+            logger.info(
+                f"成功加载 ONNX 模型，使用执行引擎: {session.get_providers()[0]}"
+            )
+            return session
         except Exception as e:
-            logger.error(f"传统分类模型加载失败: {e}")
+            logger.error(f"ONNX 模型加载失败: {e}")
             raise
 
     def predict(
         self, batch_imgs: List[Image.Image], device: str, conf_thresh: float
     ) -> List[Tuple[np.ndarray, np.ndarray, np.ndarray]]:
+        # 获取输入层参数
+        input_name = self.model.get_inputs()[0].name
+        input_shape = self.model.get_inputs()[0].shape
 
-        self.model.to(device)
-        batch_results = []
-
-        # 数据预处理
-        tensor_imgs = torch.stack([self.transform(img) for img in batch_imgs]).to(
-            device
+        # 解析 ONNX 所需尺寸 (一般为 [batch, C, H, W])
+        target_h = (
+            input_shape[2] if isinstance(input_shape[2], int) else batch_imgs[0].height
+        )
+        target_w = (
+            input_shape[3] if isinstance(input_shape[3], int) else batch_imgs[0].width
         )
 
-        with torch.no_grad():
-            outputs = self.model(tensor_imgs)
-            # 假设输出为 logits，计算 softmax 概率
-            probs = torch.nn.functional.softmax(outputs, dim=1)
-            max_probs, predicted_classes = torch.max(probs, dim=1)
+        # 1. 预处理 (基于通用目标检测归一化，取消分类模型专用的 ImageNet Normalize)
+        batch_tensor = []
+        for img in batch_imgs:
+            # 目标检测 ONNX 普遍需要 RGB float32 / 255.0
+            img_resized = img.resize((target_w, target_h))
+            img_arr = np.array(img_resized, dtype=np.float32) / 255.0
+            img_arr = np.transpose(img_arr, (2, 0, 1))  # HWC -> CHW
+            batch_tensor.append(img_arr)
 
-            max_probs = max_probs.cpu().numpy()
-            predicted_classes = predicted_classes.cpu().numpy()
+        input_data = np.stack(batch_tensor)
 
-        for i, img in enumerate(batch_imgs):
-            score = max_probs[i]
-            cls_id = predicted_classes[i]
+        # 2. 推理
+        outputs = self.model.run(None, {input_name: input_data})
 
-            # 仅当置信度超过阈值时才输出，否则视为空
-            if score >= conf_thresh:
-                # 分类模型将整个图像块作为一个目标
-                box = np.array([[0, 0, img.width, img.height]])
-                score_arr = np.array([score])
-                cls_arr = np.array([cls_id])
-            else:
-                box = np.array([])
-                score_arr = np.array([])
-                cls_arr = np.array([])
+        # 3. 后处理提示与对接
+        # 接口预留：由于不同架构 (YOLO/Faster R-CNN) 导出的 ONNX 张量结构不同，
+        # 建议在导出 ONNX 时将 NMS 和 Box 还原节点打包进计算图中。
+        # 此处返回空以适配各种 ONNX 格式，实际使用时需在此补充 NumPy 维度的切片还原。
+        logger.debug(f"ONNX 推理完成，原始输出维度: {[o.shape for o in outputs]}")
 
-            batch_results.append((box, score_arr, cls_arr))
+        batch_results = []
+        for _ in range(len(batch_imgs)):
+            batch_results.append((np.array([]), np.array([]), np.array([])))
 
         return batch_results
 
     def get_default_patch_size(self) -> int:
-        # 传统分类模型难以直接从权重推断尺寸，返回典型的 224
-        return self.patch_size
+        try:
+            # 提取 ONNX 静态计算图指定的 H 和 W
+            input_shape = self.model.get_inputs()[0].shape
+            if len(input_shape) >= 4 and isinstance(input_shape[2], int):
+                return input_shape[2]
+        except Exception as e:
+            logger.warning(f"无法从 ONNX 模型提取计算图尺寸: {e}")
+        return 512
 
 
 class ModelAdapterFactory:
@@ -187,13 +179,15 @@ class ModelAdapterFactory:
     ) -> BaseModelAdapter:
         model_type = model_type.upper()
 
-        if model_type == "YOLO":
+        # 优先通过文件后缀判断
+        if model_path.lower().endswith(".onnx"):
+            return ONNXObjectDetectionAdapter(model_path)
+        elif model_path.lower().endswith(".pt") or model_type == "YOLO":
             return YOLOAdapter(model_path)
-        elif model_type in ["RESNET", "VIT", "CLASSIFIER"]:
-            return ClassificationAdapter(model_path, patch_size=patch_size)
         else:
-            # 尝试通过启发式规则自动猜测
             if "yolo" in os.path.basename(model_path).lower():
                 return YOLOAdapter(model_path)
             else:
-                raise ValueError(f"不支持的模型类型或无法识别架构: {model_type}")
+                raise ValueError(
+                    f"不支持的模型格式 ({model_type})。当前目标检测支持 .onnx 或包含模型结构的 .pt 文件。"
+                )

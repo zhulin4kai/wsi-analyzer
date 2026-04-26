@@ -1,3 +1,4 @@
+import concurrent.futures
 import json
 import os
 
@@ -43,10 +44,10 @@ class WSIAnalyzer:
             min(raw_stride, getattr(config, "AI_STRIDE_MAX", 4096)),
         )
 
-        # 自动纠正：步长不能大于切片尺寸，否则会引发漏检区域
+        # 自动纠正：步长不应大于切片尺寸，以避免漏检
         if self.stride > self.patch_size:
             logger.warning(
-                f"自动纠正: 步长 ({self.stride}) 大于切片尺寸 ({self.patch_size})，已强制截断为 {self.patch_size}。"
+                f"自动纠正: 步长 ({self.stride}) 大于切片尺寸 ({self.patch_size})，已修改为 {self.patch_size}。"
             )
             self.stride = self.patch_size
 
@@ -101,7 +102,7 @@ class WSIAnalyzer:
     def cancel(self):
         """中止当前的分析任务"""
         self._is_cancelled = True
-        logger.info("[*] 收到中止信号，正在安全退出推断循环...")
+        logger.info("[*] 收到中止信号，退出推断循环...")
 
     def _generate_solid_mask(self, target_level=None):
         if target_level is None:
@@ -162,31 +163,55 @@ class WSIAnalyzer:
             if self._is_cancelled:
                 break
 
-            # 动态显存陷阱 (OOM Illusion) 防护
+            # 显存溢出预检测
             if self.device in ["cuda", "mps"]:
                 _, free_vram = HardwareProfiler.get_vram_info(self.device)
                 if free_vram < (self.batch_size * config.VRAM_PER_TILE_MB + 300.0):
                     logger.warning(
-                        f"检测到显存极低 ({free_vram:.1f}MB)，触发自适应降级，batch_size 折半！"
+                        f"检测到可用显存较低 ({free_vram:.1f}MB)，自动缩减 batch_size"
                     )
                     self.batch_size = max(1, self.batch_size // 2)
 
             batch_coords = valid_coords[i : i + self.batch_size]
             i += len(batch_coords)
 
-            batch_imgs = []
-            for x_min, y_min in batch_coords:
+            def fetch_patch(coord):
+                x_min, y_min = coord
                 patch_rgba = self.slide_engine.read_region(
                     (x_min, y_min), 0, (self.patch_size, self.patch_size)
                 )
-                batch_imgs.append(patch_rgba.convert("RGB"))
+                return patch_rgba.convert("RGB")
 
-            results = self.model_adapter.predict(
-                batch_imgs, device=self.device, conf_thresh=self.conf_thresh
-            )
+            # 采用线程池并发读取图像，提高数据加载效率
+            with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+                batch_imgs = list(executor.map(fetch_patch, batch_coords))
 
-            for i, (boxes, scores, classes) in enumerate(results):
-                X_min, Y_min = batch_coords[i]
+            try:
+                results = self.model_adapter.predict(
+                    batch_imgs, device=self.device, conf_thresh=self.conf_thresh
+                )
+            except RuntimeError as e:
+                # 捕获 OOM 异常并执行降级重试
+                if (
+                    "out of memory" in str(e).lower()
+                    or "oom" in str(e).lower()
+                    or "memory" in str(e).lower()
+                ):
+                    logger.warning(
+                        "发生显存溢出 (OOM)，正在清空缓存并缩减 Batch Size 进行重试"
+                    )
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+
+                    self.batch_size = max(1, self.batch_size // 2)
+                    # 回退指针，重新处理当前批次
+                    i -= len(batch_coords)
+                    continue
+                else:
+                    raise e
+
+            for j, (boxes, scores, classes) in enumerate(results):
+                X_min, Y_min = batch_coords[j]
                 if len(boxes) == 0:
                     continue
 
@@ -201,7 +226,7 @@ class WSIAnalyzer:
             current_processed += len(batch_coords)
             pbar.update(len(batch_coords))
 
-            # 【核心修改】触发进度条更新
+            # 触发进度条更新
             if progress_callback and total_patches > 0:
                 progress_percent = int(
                     (processed_patches + current_processed) / total_patches * 100
@@ -232,7 +257,7 @@ class WSIAnalyzer:
         return final_results
 
     def process(self, resume_data=None, progress_callback=None, status_callback=None):
-        """新增 status_callback 用于给界面左下角的 StatusBar 汇报当前处于哪个阶段"""
+        """处理推理逻辑并通过回调更新状态"""
         self._is_cancelled = False
 
         global_boxes = []
