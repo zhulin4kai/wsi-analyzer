@@ -47,25 +47,25 @@ class TileRenderTask(QRunnable):
         self.signals = RenderWorkerSignals()
 
     def run(self):
-        # 如果任务在排队期间已经过期，直接丢弃
+        # 检查任务是否过期
         if self.version < self.active_version_func():
             return
 
         try:
-            # 1. 耗时操作：底层 C 库读取图像
+            # 1. 读取图像区域
             pil_img = self.slide_engine.read_region(
                 (self.x, self.y), self.level, (self.w, self.h)
             )
 
-            # 再次检查是否过期（读取耗时可能较长）
+            # 读取后再次检查任务是否过期
             if self.version < self.active_version_func():
                 return
 
-            # 2. 耗时操作：内存像素格式转换
-            # 必须调用 .copy() 切断与 PIL 的内存绑定，防止跨线程引发 C++ 崩溃
+            # 2. 像素格式转换
+            # 使用 .copy() 解除与 PIL 的内存绑定，避免跨线程异常
             qimg = ImageQt(pil_img).copy()
 
-            # 3. 将成品图像发回给主 UI 线程
+            # 3. 发送图像数据信号
             self.signals.image_ready.emit(
                 self.version,
                 self.level,
@@ -106,7 +106,7 @@ class RenderWorker(QObject):
         return self.active_version
 
     def request_render(self, slide_engine, level, col, row, x, y, w, h, scale, version):
-        """主线程调用此方法，提交最新的渲染请求"""
+        """提交渲染请求"""
         self.active_version = max(self.active_version, version)
 
         task = TileRenderTask(

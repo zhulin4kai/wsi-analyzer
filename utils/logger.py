@@ -1,8 +1,8 @@
 import logging
-from logging.handlers import RotatingFileHandler
 import os
 import sys
 import traceback
+from logging.handlers import RotatingFileHandler
 
 
 def setup_logger():
@@ -23,17 +23,19 @@ def setup_logger():
 
     # 统一的日志格式：时间 [级别] 文件名:行号 - 信息
     formatter = logging.Formatter(
-        fmt='%(asctime)s [%(levelname)s] %(filename)s:%(lineno)d - %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
+        fmt="%(asctime)s [%(levelname)s] %(filename)s:%(lineno)d - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
     )
 
-    # 1. 文件处理器 (RotatingFileHandler) - 防爆盘
-    # 每个文件最大 10MB，最多保留 5 个历史备份 (wsi_analyzer.log.1, .log.2...)
-    file_handler = RotatingFileHandler(log_file, maxBytes=10 * 1024 * 1024, backupCount=5, encoding='utf-8')
+    # 1. 文件处理器 (RotatingFileHandler)
+    # 每个文件最大 10MB，最多保留 5 个历史备份 (wsi_analyzer.log.1, wsi_analyzer.log.2)
+    file_handler = RotatingFileHandler(
+        log_file, maxBytes=10 * 1024 * 1024, backupCount=5, encoding="utf-8"
+    )
     file_handler.setLevel(logging.INFO)  # 文件里只记录 INFO、WARNING、ERROR
     file_handler.setFormatter(formatter)
 
-    # 2. 控制台处理器 (StreamHandler) - 方便开发时查看
+    # 2. 控制台处理器 (StreamHandler)
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(logging.DEBUG)  # 控制台可以看 DEBUG
     console_handler.setFormatter(formatter)
@@ -42,15 +44,15 @@ def setup_logger():
     logger.addHandler(console_handler)
 
     # 3. 全局未捕获异常拦截器
-    # 解决 PySide6 报错时黑框一闪而过、静默闪退的问题
+    # 用于记录程序中未处理的异常
     def handle_exception(exc_type, exc_value, exc_traceback):
         # 允许键盘中断 (Ctrl+C) 正常退出
         if issubclass(exc_type, KeyboardInterrupt):
             sys.__excepthook__(exc_type, exc_value, exc_traceback)
             return
 
-        # 将闪退的严重错误连同堆栈信息记录到日志文件
-        logger.critical("程序发生未捕获的全局异常崩溃", exc_info=(exc_type, exc_value, exc_traceback))
+        # 记录异常及其堆栈信息
+        logger.critical("发生未捕获异常", exc_info=(exc_type, exc_value, exc_traceback))
 
     # 替换 Python 的默认异常处理钩子
     sys.excepthook = handle_exception
@@ -58,5 +60,5 @@ def setup_logger():
     return logger
 
 
-# 暴露出一个全局单例 logger 供其他文件导入
+# 提供全局 logger 实例
 logger = setup_logger()

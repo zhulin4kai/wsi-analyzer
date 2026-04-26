@@ -62,8 +62,8 @@ class HardwareProfiler:
     @staticmethod
     def measure_io_speed(file_path: str, engine_init_func) -> float:
         """
-        隐形 I/O 测速 (Invisible Benchmark)
-        记录加载 WSI 及提取宏观缩略图的时间差，反推 I/O 吞吐率。
+        I/O 测速 (I/O Benchmark)
+        记录加载 WSI 及提取缩略图的时间差，计算 I/O 吞吐率。
         :param file_path: WSI 文件路径
         :param engine_init_func: 一个可调用对象，负责实例化引擎并获取 thumbnail，返回 (图像对象/大小, 像素体积_bytes)
         :return: I/O 速度 (MB/s)
@@ -83,7 +83,7 @@ class HardwareProfiler:
             return io_speed_mbps
 
         except Exception as _e:
-            # 如果测速失败，返回一个保守的安全默认值 (20 MB/s)
+            # 如果测速失败，返回安全默认值 (20.0 MB/s)
             return 20
 
     @staticmethod
@@ -104,17 +104,17 @@ class HardwareProfiler:
             total_ram, _ = HardwareProfiler.get_system_ram_info()
 
         # 1. 计算理论显存上限
-        # 安全冗余预留: 为避免显存碎片或突发占用，保留 500MB
+        # 安全冗余预留: 避免显存碎片或突发占用
         safety_margin = config.SAFE_VRAM_MARGIN_MB
-        # 模型底座开销估算 (经验值：模型加载和激活计算约占用其体积的 2.5 倍显存)
+        # 模型预估开销 (根据模型体积估算显存占用)
         model_overhead = model_size * config.MODEL_VRAM_OVERHEAD_MULTIPLIER
-        # 单个 512x512 瓦片的显存占用 (假设为 float32 的张量，带上一定计算开销，约 8MB)
+        # 单个瓦片的显存预估占用
         vram_per_tile = config.VRAM_PER_TILE_MB
 
         usable_vram = free_vram - model_overhead - safety_margin
 
         if usable_vram <= 0:
-            theoretical_batch_size = 1  # 显存极低时，采用最低兜底值
+            theoretical_batch_size = 1  # 显存不足时，采用最小值 1
         else:
             theoretical_batch_size = int(usable_vram / vram_per_tile)
 
@@ -139,7 +139,7 @@ class HardwareProfiler:
                 theoretical_batch_size, config.BATCH_SIZE_CAP_NVME_SSD
             )
 
-        # 兜底约束，保证 batch_size 最少为 1
+        # 保证 batch_size 最少为 1
         final_batch_size = max(1, io_capped_batch_size)
 
         # 3. 缓存自适应降级
@@ -162,7 +162,7 @@ class HardwareProfiler:
     def calculate_auto_tune_params(
         io_speed: float, patch_size: int, model_size: float
     ) -> dict:
-        """根据进化后的综合测速，推算最佳滑动步长重叠率与置信度"""
+        """根据综合测速，计算滑动步长重叠率与置信度"""
         # 步长自适应
         if io_speed < config.IO_SPEED_SATA_SSD_MBPS:
             stride = int(patch_size * config.AUTO_STRIDE_RATIO_LOW)
@@ -183,10 +183,10 @@ class HardwareProfiler:
     def _rate_io_speed(io_speed: float) -> str:
         """评估 I/O 评级，用于 UI 展示"""
         if io_speed < config.IO_SPEED_NAS_USB2_MBPS:
-            return "极慢 (HDD/NAS/USB2.0)"
+            return "低速 (HDD/NAS/USB2.0)"
         elif io_speed < config.IO_SPEED_SATA_SSD_MBPS:
             return "一般 (SATA SSD)"
         elif io_speed < config.IO_SPEED_NORMAL_SSD_MBPS:
             return "良好 (普通固态)"
         else:
-            return "优秀 (NVMe/PCIe SSD)"
+            return "高速 (NVMe/PCIe SSD)"

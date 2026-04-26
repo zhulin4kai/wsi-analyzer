@@ -10,7 +10,7 @@ class ReportExporter:
     def export(parent, current_wsi_path, current_ai_results, export_format="csv"):
         """生成并导出结构化报告"""
         if not current_ai_results:
-            QMessageBox.warning(parent, "提示", "暂无分析数据可导出！")
+            QMessageBox.warning(parent, "提示", "暂无分析数据可导出")
             return
 
         # 1. 基础统计学计算
@@ -54,7 +54,7 @@ class ReportExporter:
         # 3. 写入文件 (包含 I/O 异常捕获)
         try:
             if save_path.endswith(".csv"):
-                # 使用 utf-8-sig 编码，防止 Excel 打开中文乱码
+                # 使用 utf-8-sig 编码处理中文显示
                 with open(save_path, mode="w", newline="", encoding="utf-8-sig") as f:
                     writer = csv.writer(f)
 
@@ -107,7 +107,7 @@ class ReportExporter:
                     b = item["bbox"]
                     x_min, y_min, x_max, y_max = b[0], b[1], b[2], b[3]
 
-                    # 构造闭合多边形 (起点和终点必须重合)
+                    # 构造闭合多边形 (起点和终点重合)
                     polygon_coords = [
                         [x_min, y_min],
                         [x_max, y_min],
@@ -141,15 +141,13 @@ class ReportExporter:
                 with open(save_path, mode="w", encoding="utf-8") as f:
                     json.dump(geojson_data, f, ensure_ascii=False, indent=4)
 
-            QMessageBox.information(
-                parent, "导出成功", f"报告已成功保存至:\n{save_path}"
-            )
+            QMessageBox.information(parent, "导出成功", f"报告已保存至:\n{save_path}")
 
         except PermissionError:
             QMessageBox.critical(
                 parent,
                 "导出失败",
-                "文件被占用！\n请检查该文件是否正在被 Excel 或其他程序打开，关闭后再试。",
+                "文件被占用，请关闭相关程序后再试。",
             )
         except Exception as e:
-            QMessageBox.critical(parent, "导出失败", f"写入文件时发生错误:\n{str(e)}")
+            QMessageBox.critical(parent, "导出失败", f"写入文件时发生错误:\n{e}")

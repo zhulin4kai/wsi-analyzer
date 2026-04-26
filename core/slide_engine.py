@@ -1,10 +1,12 @@
 import openslide
 
+
 class WSIDataEngine:
     """
-    WSI 图像数据引擎：封装所有底层 OpenSlide 图片截取与金字塔层级计算逻辑。
-    UI 层与算法层不直接操作 openslide，统一通过本引擎获取数据。
+    WSI 图像数据引擎：封装 OpenSlide 图像读取与金字塔层级计算逻辑。
+    UI 层与算法层统一通过本引擎获取数据。
     """
+
     def __init__(self, file_path):
         self.file_path = file_path
         self.slide = openslide.OpenSlide(file_path)
@@ -12,7 +14,7 @@ class WSIDataEngine:
 
     def get_thumbnail(self, level_from_last=1):
         """
-        获取宏观底图（缩略图）
+        获取缩略图
         :param level_from_last: 1 表示最后一层(最小)，2 表示倒数第二层
         :return: (PIL.Image(RGB格式), downsample_factor)
         """
@@ -28,9 +30,11 @@ class WSIDataEngine:
 
         return thumb_img, downsample_factor
 
-    def calculate_render_params(self, rect_left, rect_top, rect_width, rect_height, target_downsample):
+    def calculate_render_params(
+        self, rect_left, rect_top, rect_width, rect_height, target_downsample
+    ):
         """
-        根据当前视口请求，计算 OpenSlide 截取所需的全部参数
+        根据当前视口计算 OpenSlide 截取参数
         :return: loc_x, loc_y, best_level, size_w, size_h, level_downsample
         """
         best_level = self.slide.get_best_level_for_downsample(target_downsample)
@@ -51,7 +55,7 @@ class WSIDataEngine:
         return level, dim, downsample_factor
 
     def read_region(self, location, level, size):
-        """透传 OpenSlide 的读取功能（供多线程和 AI 使用）"""
+        """提供 OpenSlide 的读取接口"""
         return self.slide.read_region(location, level, size)
 
     def close(self):

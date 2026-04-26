@@ -10,7 +10,7 @@ from PySide6.QtWidgets import (
 
 
 class MinimapView(QGraphicsView):
-    # 信号：当用户点击鹰眼图时，向外抛出 Level 0 的绝对中心坐标
+    # 点击缩略图时发送 Level 0 坐标
     navigate_requested = Signal(float, float)
 
     def __init__(self, parent=None):
@@ -18,7 +18,7 @@ class MinimapView(QGraphicsView):
         self.scene_canvas = QGraphicsScene(self)
         self.setScene(self.scene_canvas)
 
-        # 默认隐藏，直到用户加载了 WSI 切片再显示
+        # 初始隐藏，加载 WSI 切片后显示
         self.setVisible(False)
 
         # 优化渲染与隐藏滚动条
@@ -49,7 +49,7 @@ class MinimapView(QGraphicsView):
 
         self.bg_item.setPixmap(QPixmap.fromImage(ImageQt(thumb_img)))
 
-        # 动态计算并设置鹰眼图的长宽比，使其与切片保持一致，避免黑边/白边
+        # 根据切片比例计算缩略图尺寸
         max_size = 250.0  # 以250像素为最大边长基准
         img_w, img_h = thumb_img.width, thumb_img.height
 
@@ -70,16 +70,16 @@ class MinimapView(QGraphicsView):
         self.setVisible(True)
 
     def resizeEvent(self, event):
-        """确保在视图尺寸发生改变（如首次显示）时，切片完美填满整个鹰眼图，防止挤成一团"""
+        """视图尺寸改变时调整内容显示"""
         super().resizeEvent(event)
         if self.scene() and not self.scene().sceneRect().isEmpty():
             self.fitInView(self.scene().sceneRect(), Qt.KeepAspectRatio)
 
     def update_indicator(self, level0_rect: QRectF):
-        """【单向同步】：主视图 -> 鹰眼图"""
+        """主视图同步至鹰眼图"""
         if self.downsample_factor <= 0:
             return
-        # 核心算式：Level0 坐标 / 缩放系数 = 鹰眼图局部坐标
+        # 坐标换算：Level 0 -> 鹰眼图局部坐标
         x = level0_rect.x() / self.downsample_factor
         y = level0_rect.y() / self.downsample_factor
         w = level0_rect.width() / self.downsample_factor
@@ -89,16 +89,16 @@ class MinimapView(QGraphicsView):
         self.viewport().update()
 
     def mousePressEvent(self, event):
-        """【双向同步】：鹰眼图 -> 主视图"""
+        """鹰眼图同步至主视图"""
         if event.button() == Qt.LeftButton:
-            # 将鼠标点击在控件上的位置转为鹰眼图 Scene 坐标
+            # 控件坐标转换为 Scene 坐标
             scene_pos = self.mapToScene(event.position().toPoint())
 
-            # 核心算式：鹰眼图坐标 * 缩放系数 = 主视图(Level 0)绝对坐标
+            # 坐标换算：鹰眼图 -> Level 0 绝对坐标
             level0_cx = scene_pos.x() * self.downsample_factor
             level0_cy = scene_pos.y() * self.downsample_factor
 
-            # 发射跳转请求信号
+            # 发送跳转请求
             self.navigate_requested.emit(level0_cx, level0_cy)
 
         super().mousePressEvent(event)

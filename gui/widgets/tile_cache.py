@@ -5,35 +5,35 @@ from typing import Any, List, Optional, Tuple
 class TileLRUCache:
     """
     基于 OrderedDict 实现的 WSI 瓦片 LRU (最近最少使用) 缓存池。
-    用于管理内存中驻留的图块(QGraphicsPixmapItem)，防止无限加载瓦片导致内存溢出。
+    管理内存中的图块，避免内存溢出。
     """
 
     def __init__(self, max_capacity: int = 200):
         """
         初始化 LRU 缓存池。
-        :param max_capacity: 最大缓存的瓦片数量。默认 200 张 512x512 的图块大约占用 150MB 内存。
+        :param max_capacity: 缓存图块的最大数量
         """
         self.max_capacity = max_capacity
         # OrderedDict 能够记住字典元素插入的顺序
         self._cache: OrderedDict[Tuple[int, int, int], Any] = OrderedDict()
-        # 动态 Z-index，确保最新的瓦片始终在最上层
+        # 动态 Z-index 保证最新图块位于上层
         self._current_z_value = 1
 
     def get(self, key: Tuple[int, int, int]) -> Optional[Any]:
         """
         获取缓存中的瓦片。
-        如果瓦片存在，将其移动到字典末尾（标记为最新活跃），并返回。
+        若存在，则移动至末尾并返回。
         :param key: 瓦片的唯一标识，通常为 (level, col, row)
         :return: 缓存的瓦片对象 (通常是 QGraphicsPixmapItem)，不存在则返回 None
         """
         if key not in self._cache:
             return None
 
-        # 移动到末尾，表示刚刚被访问过（最近使用）
+        # 记录访问状态
         self._cache.move_to_end(key)
         item = self._cache[key]
 
-        # 动态提升 Z-index，解决跨层级缩放时的遮挡残影 Bug
+        # 提升 Z-index 避免图层遮挡
         self._current_z_value += 1
         if hasattr(item, "setZValue"):
             item.setZValue(self._current_z_value)
@@ -43,11 +43,11 @@ class TileLRUCache:
     def put(self, key: Tuple[int, int, int], item: Any) -> Optional[Any]:
         """
         存入新的瓦片。
-        如果当前缓存已达到最大容量，则淘汰并弹出最老的一个瓦片。
+        达到容量上限时移除最旧的图块。
 
         :param key: 瓦片的唯一标识 (level, col, row)
         :param item: 要缓存的图块对象
-        :return: 被淘汰出局的老瓦片对象 (如果没有发生淘汰则返回 None)，供调用方从 UI Scene 中安全移除
+        :return: 被移除的图块对象
         """
         evicted_item = None
 
@@ -62,9 +62,9 @@ class TileLRUCache:
         if hasattr(item, "setZValue"):
             item.setZValue(self._current_z_value)
 
-        # 检查容量，如果超限则弹出最老的记录（位于字典头部的位置）
+        # 检查容量并清理过期记录
         if len(self._cache) > self.max_capacity:
-            # popitem(last=False) 采用 FIFO 模式弹出第一个插入的元素（即最久未访问的元素）
+            # 移除最久未访问元素
             _, evicted_item = self._cache.popitem(last=False)
 
         return evicted_item
@@ -72,14 +72,14 @@ class TileLRUCache:
     def contains(self, key: Tuple[int, int, int]) -> bool:
         """
         判断瓦片是否在缓存中。
-        与 get() 不同，此方法仅做探测，不会改变瓦片在 LRU 中的活跃度排序。
+        仅探测是否存在，不改变缓存顺序。
         """
         return key in self._cache
 
     def clear(self) -> List[Any]:
         """
         清空所有缓存。
-        :return: 返回当前缓存中所有的瓦片对象列表，供外部集中执行清理销毁操作。
+        :return: 缓存的所有图块对象列表
         """
         items = list(self._cache.values())
         self._cache.clear()

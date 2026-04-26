@@ -63,14 +63,14 @@ class DatabaseManager:
     @staticmethod
     def get_wsi_hash(file_path):
         """
-        基于部分文件特征的极速哈希算法（免疫文件重命名和移动）
+        基于部分文件特征的哈希算法（不受文件重命名和移动影响）
         联合要素: 文件头部 1MB 字节的 MD5 + 文件字节级精确大小
         """
         try:
             abs_path = os.path.abspath(file_path)
             file_size = os.path.getsize(abs_path)
 
-            # 读取头部最多 1MB 数据进行哈希，速度极快且唯一性有保障
+            # 读取头部最多 1MB 数据进行哈希，以平衡计算速度与特征唯一性
             chunk_size = min(file_size, 1024 * 1024)
             with open(abs_path, "rb") as f:
                 header_bytes = f.read(chunk_size)
@@ -221,7 +221,7 @@ class DatabaseManager:
                 )
                 return max(
                     getattr(config, "DB_MIN_CAPACITY_MB", 50), val
-                )  # 强制最低 50MB
+                )  # 限制最低 50MB
         except Exception as e:
             logger.error(f"读取容量设置失败: {e}")
             return 150
@@ -272,7 +272,7 @@ class DatabaseManager:
         """设置数据库最大存储容量(MB)"""
         mb = max(
             getattr(config, "DB_MIN_CAPACITY_MB", 50), mb
-        )  # 强制限制最低 50MB，防止异常设置导致数据被清空
+        )  # 限制最低容量，避免异常设置导致数据丢失
         try:
             with sqlite3.connect(self.db_path, timeout=5000) as conn:
                 cursor = conn.cursor()
@@ -318,7 +318,7 @@ class DatabaseManager:
                         conn.execute("VACUUM")
                 except sqlite3.OperationalError as ve:
                     logger.warning(f"VACUUM 当前被占用，稍后重试: {ve}")
-                    break  # 必须立刻跳出循环，否则文件大小不缩小会导致把整张表清空！
+                    break  # 跳出循环，避免引发数据异常
 
         except Exception as e:
             logger.error(f"执行容量限制清理失败: {e}")

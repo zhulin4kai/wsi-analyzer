@@ -20,7 +20,7 @@ TILE_SIZE = 512
 
 class WSIView(QGraphicsView):
     """
-    核心视口组件：负责处理鼠标交互（平移、缩放）并按需调度 OpenSlide 渲染
+    视口组件：负责处理鼠标交互（平移、缩放）并调度渲染
     """
 
     view_rect_changed = Signal(QRectF)
@@ -34,22 +34,18 @@ class WSIView(QGraphicsView):
         self.scene_canvas = QGraphicsScene(self)
         self.setScene(self.scene_canvas)
 
-        # 宏观底图铺垫层
+        # 底图铺垫层
         self.bg_layer_item = QGraphicsPixmapItem()
         self.bg_layer_item.setZValue(-1)
         self.scene_canvas.addItem(self.bg_layer_item)
 
-        # 2. 核心渲染载体：使用瓦片缓存池
+        # 2. 渲染载体：瓦片缓存池
         self.tile_cache = TileLRUCache(max_capacity=200)
 
-        # 3. 视图优化设置
+        # 3. 视图设置
         self.setRenderHint(QPainter.Antialiasing)
-        self.setRenderHint(
-            QPainter.SmoothPixmapTransform
-        )  # 开启平滑插值，防止缩放时出现马赛克
-        self.setHorizontalScrollBarPolicy(
-            Qt.ScrollBarAlwaysOff
-        )  # 隐藏滚动条，实现类似谷歌地图的纯净画布
+        self.setRenderHint(QPainter.SmoothPixmapTransform)  # 开启平滑插值
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)  # 隐藏滚动条
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
 
         # 缩放锚点：以鼠标指针当前位置为中心进行缩放
@@ -57,19 +53,17 @@ class WSIView(QGraphicsView):
 
         # 4. 后端引擎与状态变量
         self.slide_engine = None
-        self._current_qimg = (
-            None  # 保持对当前 QImage 的引用，防止被 Python GC 提前回收引发崩溃
-        )
+        self._current_qimg = None  # 保持对当前 QImage 的引用，避免垃圾回收导致异常
 
         # 交互状态
         self._is_panning = False
         self._last_mouse_pos = None
 
-        # 用于放置在连续滚动滚轮或拖拽时，高频重复发射 interaction_started 信号
+        # 用于避免连续滚动或拖拽时高频重复发射 interaction_started 信号
         self._is_interaction = False
 
-        # 异步渲染核心
-        # 5. 防抖定时器
+        # 异步渲染管理
+        # 5. 渲染防抖定时器
         # 记录当前请求的版本号
         self.render_version = 0
 
@@ -78,36 +72,33 @@ class WSIView(QGraphicsView):
         self.render_worker.image_ready.connect(self._on_image_ready)
         self.render_worker.start()
 
-        # 1. 渲染触发定时器 (极速响应)
-        # 负责不断去后台取最新高清图，哪怕在拖拽中也可以极速触发
+        # 1. 渲染触发定时器
+        # 用于定时触发高清图渲染请求
         self.render_timer = QTimer()
         self.render_timer.setSingleShot(True)
-        self.render_timer.setInterval(RENDER_DEBOUNCE_MS)  # 降到极低的 50ms
+        self.render_timer.setInterval(RENDER_DEBOUNCE_MS)  # 50ms 间隔
         self.render_timer.timeout.connect(self._request_high_res_render)
 
-        # 2. 绝对静止定时器 (掌控 UI 繁重图层)
-        # 只有在完全没有任何交互后，才允许绘制沉重的 AI 画框
+        # 2. 静止状态定时器
+        # 在交互完全结束后，允许绘制额外的 UI 图层
         self.idle_timer = QTimer()
         self.idle_timer.setSingleShot(True)
-        self.idle_timer.setInterval(
-            IDLE_THRESHOLD_MS
-        )  # 300ms 不操作，才认为交互真正结束
+        self.idle_timer.setInterval(IDLE_THRESHOLD_MS)  # 交互结束阈值
         self.idle_timer.timeout.connect(self._on_absolute_idle)
 
     def _mark_interaction(self):
-        """统一管理交互状态的入口"""
+        """管理交互状态"""
         # 1. 重置静止定时器
         self.idle_timer.start()
 
-        # 2. 如果当前不在交互状态，进入交互并通知主界面隐藏画框
+        # 2. 如果当前不在交互状态，进入交互并通知主界面
         if not self._is_interaction:
             self._is_interaction = True
             self.interaction_started.emit()
 
     def _request_high_res_render(self):
         """
-        主线程只负责算坐标
-        由定时器触发，计算好所需坐标后给后台线程。
+        由定时器触发，计算坐标并提交渲染任务。
         """
 
         def finish_interaction_early():
@@ -137,7 +128,7 @@ class WSIView(QGraphicsView):
         level_downsample = self.slide_engine.slide.level_downsamples[best_level]
         level_dim = self.slide_engine.slide.level_dimensions[best_level]
 
-        # 切换层级时隐藏其他层级的旧瓦片，防止跨层缩放时的残影遮挡
+        # 切换层级时隐藏其他层级的瓦片，避免重叠遮挡
         for key, item in self.tile_cache._cache.items():
             if key[0] != best_level:
                 item.setVisible(False)
@@ -167,7 +158,7 @@ class WSIView(QGraphicsView):
                 # 检查缓存是否命中
                 cached_item = self.tile_cache.get(key)
                 if cached_item:
-                    # 缓存命中，无需重新读取，只需确保它是可见的
+                    # 缓存命中，确保图块可见
                     if not cached_item.scene():
                         self.scene_canvas.addItem(cached_item)
                     cached_item.setVisible(True)
@@ -176,7 +167,7 @@ class WSIView(QGraphicsView):
                     tile_w = TILE_SIZE
                     tile_h = TILE_SIZE
 
-                    # 处理边缘不完整的瓦片
+                    # 处理边缘瓦片
                     if col == max_col:
                         tile_w = level_dim[0] - col * TILE_SIZE
                     if row == max_row:
@@ -204,15 +195,15 @@ class WSIView(QGraphicsView):
 
     def _on_image_ready(self, version, level, col, row, qimg, x, y, scale):
         """
-        当后台线程把瓦片处理好送回来时，主线程进行接收。
+        接收后台线程返回的瓦片数据。
         """
-        # 结果审查：过期的老任务直接丢弃
+        # 检查任务版本，丢弃过期任务
         if version < self.render_version:
             return
 
         key = (level, col, row)
 
-        # 如果已经存在（可能由于并发导致重复请求），不再处理
+        # 检查缓存是否存在重复图块
         if self.tile_cache.contains(key):
             return
 
@@ -221,7 +212,7 @@ class WSIView(QGraphicsView):
         item = QGraphicsPixmapItem(pixmap)
         item.setPos(x, y)
         item.setScale(scale)
-        item.setZValue(0)  # 覆盖在宏观底图上
+        item.setZValue(0)  # 覆盖底图
 
         # 添加到 Scene
         self.scene_canvas.addItem(item)
@@ -231,13 +222,13 @@ class WSIView(QGraphicsView):
         if evicted_item and evicted_item.scene():
             self.scene_canvas.removeItem(evicted_item)
 
-        # 如果交互本来就结束了，我们只需展示瓦片
+        # 检查交互状态并展示瓦片
         if self._is_interaction:
             self._is_interaction = False
             self.interaction_finished.emit()
 
     def closeEvent(self, event):
-        """关闭窗口时安全退出线程"""
+        """关闭窗口时退出线程"""
         if hasattr(self, "render_worker"):
             self.render_worker.stop()
         super().closeEvent(event)
@@ -270,15 +261,15 @@ class WSIView(QGraphicsView):
         except Exception as e:
             logger.error(f"宏观底图加载失败: {e}")
 
-        # 计算初始缩放比例（让整个切片刚好适应当前窗口大小）
+        # 计算初始缩放比例
         view_rect = self.viewport().rect()
         scale_w = view_rect.width() / w
         scale_h = view_rect.height() / h
-        initial_scale = min(scale_w, scale_h) * 0.95  # 留 5% 边距
+        initial_scale = min(scale_w, scale_h) * 0.95  # 预留边距
 
         self.scale(initial_scale, initial_scale)
 
-        # 触发首次渲染
+        # 请求首次渲染
         self._render_high_res_viewport()
 
     # ==================== 模块 B: 交互事件重写 ====================
@@ -287,7 +278,7 @@ class WSIView(QGraphicsView):
         if not self.slide_engine:
             return
 
-        # 如果是连续滚动动作的第一下，触发交互开始信号
+        # 触发交互开始信号
         self._mark_interaction()
 
         # 每次滚动的缩放步长
@@ -299,11 +290,11 @@ class WSIView(QGraphicsView):
         current_scale = self.transform().m11()
         new_scale = current_scale * zoom_factor
 
-        # 限制缩放范围：最大放大到 Level 0 (1.0)，最小缩小到刚好塞满屏幕
+        # 限制缩放范围
         if new_scale > 1.0:
             zoom_factor = 1.0 / current_scale
 
-        # 执行缩放 (由于设置了 AnchorUnderMouse，Qt 会自动处理偏移数学计算)
+        # 执行缩放
         self.scale(zoom_factor, zoom_factor)
 
         # 重置防抖定时器
@@ -313,7 +304,7 @@ class WSIView(QGraphicsView):
     def mousePressEvent(self, event):
         """重写鼠标按下：开启平移"""
         if event.button() == Qt.LeftButton and self.slide_engine:
-            # 鼠标按下的瞬间，进入交互状态
+            # 记录鼠标按下的交互状态
             self._mark_interaction()
             self._is_panning = True
             self._last_mouse_pos = event.position().toPoint()
@@ -330,7 +321,7 @@ class WSIView(QGraphicsView):
             delta = current_pos - self._last_mouse_pos
             self._last_mouse_pos = current_pos
 
-            # 通过操作隐藏的滚动条来实现画布平移
+            # 通过滚动条实现画布平移
             h_bar = self.horizontalScrollBar()
             v_bar = self.verticalScrollBar()
             h_bar.setValue(h_bar.value() - delta.x())
@@ -358,10 +349,10 @@ class WSIView(QGraphicsView):
     # ==================== 模块 C: 视口按需渲染核心逻辑 ====================
     def _render_high_res_viewport(self):
         """
-        核心渲染逻辑：坐标映射 -> 计算层级 -> 截取图像 -> 对齐显示
+        坐标映射与层级计算
         """
 
-        # 防止函数提前return， 提取一个重置方法
+        # 提取重置方法
         def finish_interaction():
             if self._is_interaction:
                 self._is_interaction = False
@@ -374,23 +365,22 @@ class WSIView(QGraphicsView):
         # 1. 视图 -> Scene 坐标映射
         # 获取当前 Viewport 在屏幕上的矩形
         viewport_rect = self.viewport().rect()
-        # 将屏幕矩形映射到 Scene 坐标系（即 Level 0 绝对坐标系）中，获取可见的物理区域
+        # 将屏幕矩形映射到 Scene 坐标系，获取可见区域
         visible_scene_rect = self.mapToScene(viewport_rect).boundingRect()
 
-        # 与 Scene 的物理边界取交集，防止读取超出 WSI 范围的无效数据
+        # 与 Scene 边界取交集，限制有效读取范围
         intersected_rect = visible_scene_rect.intersected(self.scene_canvas.sceneRect())
         if intersected_rect.isEmpty():
             finish_interaction()
             return
 
         # 2. 动态层级 (Level) 计算
-        # 当前视图的缩放比例（例如 0.1 表示缩小了 10 倍显示）
+        # 获取当前视图缩放比例
         current_scale = self.transform().m11()
-        # 目标降采样率 (Downsample) = 1 / 缩放比例。缩小 10 倍，意味着我们需要 downsample 约为 10 的层级
+        # 计算目标降采样率
         target_downsample = 1.0 / current_scale
 
-        # _render_high_res_viewport 其实和 _request_high_res_render 现在逻辑完全一样
-        # 直接复用即可
+        # 复用渲染请求逻辑
         self._request_high_res_render()
 
     # ==================== 模块 D: 鹰眼图 ====================
