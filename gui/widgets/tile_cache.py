@@ -8,7 +8,7 @@ class TileLRUCache:
     管理内存中的图块，避免内存溢出。
     """
 
-    def __init__(self, max_capacity: int = 200):
+    def __init__(self, max_capacity: int = 500):
         """
         初始化 LRU 缓存池。
         :param max_capacity: 缓存图块的最大数量
@@ -16,8 +16,6 @@ class TileLRUCache:
         self.max_capacity = max_capacity
         # OrderedDict 能够记住字典元素插入的顺序
         self._cache: OrderedDict[Tuple[int, int, int], Any] = OrderedDict()
-        # 动态 Z-index 保证最新图块位于上层
-        self._current_z_value = 1
 
     def get(self, key: Tuple[int, int, int]) -> Optional[Any]:
         """
@@ -32,11 +30,6 @@ class TileLRUCache:
         # 记录访问状态
         self._cache.move_to_end(key)
         item = self._cache[key]
-
-        # 提升 Z-index 避免图层遮挡
-        self._current_z_value += 1
-        if hasattr(item, "setZValue"):
-            item.setZValue(self._current_z_value)
 
         return item
 
@@ -56,11 +49,6 @@ class TileLRUCache:
             self._cache.move_to_end(key)
 
         self._cache[key] = item
-
-        # 赋予最新的 Z-index
-        self._current_z_value += 1
-        if hasattr(item, "setZValue"):
-            item.setZValue(self._current_z_value)
 
         # 检查容量并清理过期记录
         if len(self._cache) > self.max_capacity:

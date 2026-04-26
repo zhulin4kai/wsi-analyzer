@@ -40,7 +40,7 @@ class WSIView(QGraphicsView):
         self.scene_canvas.addItem(self.bg_layer_item)
 
         # 2. 渲染载体：瓦片缓存池
-        self.tile_cache = TileLRUCache(max_capacity=200)
+        self.tile_cache = TileLRUCache(max_capacity=500)
 
         # 3. 视图设置
         self.setRenderHint(QPainter.Antialiasing)
@@ -128,19 +128,23 @@ class WSIView(QGraphicsView):
         level_downsample = self.slide_engine.slide.level_downsamples[best_level]
         level_dim = self.slide_engine.slide.level_dimensions[best_level]
 
-        # 切换层级时隐藏其他层级的瓦片，避免重叠遮挡
+        # 仅隐藏比当前需要的层级【分辨率更高】（即 level 值更小）的瓦片
+        # 保留比它【分辨率更低】（level 值更大）的瓦片作为缓冲背景，避免闪烁和马赛克
         for key, item in self.tile_cache._cache.items():
-            if key[0] != best_level:
+            cached_level = key[0]
+            if cached_level < best_level:
                 item.setVisible(False)
+            else:
+                item.setVisible(True)
 
         # 递增版本号，表示发起了一次新的渲染批次
         self.render_version += 1
 
-        # 计算视口覆盖的瓦片网格范围
-        start_col = int((intersected_rect.left() / level_downsample) // TILE_SIZE)
-        end_col = int((intersected_rect.right() / level_downsample) // TILE_SIZE)
-        start_row = int((intersected_rect.top() / level_downsample) // TILE_SIZE)
-        end_row = int((intersected_rect.bottom() / level_downsample) // TILE_SIZE)
+        # 计算视口覆盖的瓦片网格范围（增加边缘缓冲）
+        start_col = int((intersected_rect.left() / level_downsample) // TILE_SIZE) - 1
+        end_col = int((intersected_rect.right() / level_downsample) // TILE_SIZE) + 1
+        start_row = int((intersected_rect.top() / level_downsample) // TILE_SIZE) - 1
+        end_row = int((intersected_rect.bottom() / level_downsample) // TILE_SIZE) + 1
 
         # 限制在实际层级的有效范围内
         max_col = (level_dim[0] - 1) // TILE_SIZE
@@ -212,7 +216,11 @@ class WSIView(QGraphicsView):
         item = QGraphicsPixmapItem(pixmap)
         item.setPos(x, y)
         item.setScale(scale)
-        item.setZValue(0)  # 覆盖底图
+
+        # 严格按金字塔层级分布 Z-index，高分辨率永远覆盖低分辨率
+        max_levels = len(self.slide_engine.slide.level_dimensions)
+        z_value = max_levels - level
+        item.setZValue(z_value)
 
         # 添加到 Scene
         self.scene_canvas.addItem(item)
