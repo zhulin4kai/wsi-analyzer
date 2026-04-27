@@ -76,6 +76,9 @@ class AnalysisToolbarMixin:
 
         toolbar.addWidget(self.btn_export)
 
+        # 保存工具栏引用，供 HeatmapMixin._init_heatmap_ui() 追加控件使用
+        self._ai_toolbar = toolbar
+
         # 用于存储当前切片的最新分析结果
         self.current_ai_results = []
         self.ai_thread = None

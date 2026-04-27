@@ -107,9 +107,8 @@ HEATMAP_ALPHA_GAMMA = (
 )
 
 HEATMAP_MINI_BLUR_SIGMA = (
-    8.0  # 鹰眼图热力叠层额外高斯扩散 σ（widget 显示像素单位）
-    # sigma=8 → 热点在约 200px 宽的鹰眼图上扩散约 ±8px，视觉上明显可见
-    # 设为 0 可禁用；典型范围 4.0~12.0
+    4.0  # 鹰眼图热力叠层 resize 后额外高斯扩散 σ（minimap 像素单位）
+    # 使热点在缩略图上显示得更大；设为 0 可禁用；典型范围 2.0~6.0
 )
 
 # 热力图 LOD（缩放自适应）阈值——m11 即 viewer.transform().m11()

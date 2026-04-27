@@ -3,12 +3,13 @@ from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QGraphicsDropShadowEffect,
     QGraphicsItemGroup,
+    QGraphicsPixmapItem,
     QMainWindow,
     QMessageBox,
     QVBoxLayout,
 )
 
-from config import HUD_MARGIN
+from config import AI_LAYER_Z_VALUE, HEATMAP_Z_VALUE, HUD_MARGIN
 from gui.mixins.analysis_mixin import AnalysisMixin
 from gui.mixins.file_mixin import FileHandlingMixin
 from gui.widgets import (
@@ -40,12 +41,19 @@ class MainWindow(AnalysisMixin, FileHandlingMixin, QMainWindow):
         self.viewer = WSIView(self)
         self.setCentralWidget(self.viewer)
 
-        # 2. 初始化图层
+        # 2. 初始化图层（Z-index 由低到高：底图[-1] → 瓦片[1~N] → 热力图[500] → 预测框[600] → ROI[1000]）
+        self.heatmap_layer_item = QGraphicsPixmapItem()
+        self.heatmap_layer_item.setZValue(HEATMAP_Z_VALUE)
+        self.heatmap_layer_item.setTransformationMode(Qt.SmoothTransformation)
+        self.viewer.scene_canvas.addItem(self.heatmap_layer_item)
+
         self.ai_layer_group = QGraphicsItemGroup()
+        self.ai_layer_group.setZValue(AI_LAYER_Z_VALUE)
         self.viewer.scene_canvas.addItem(self.ai_layer_group)
 
         # 3. 初始化所有 UI 面板（_init_menu 必须最后调用，依赖其他面板已创建）
         self._init_ai_ui()
+        self._init_heatmap_ui()
         self._init_minimap_overlay()
         self._init_gallery_ui()
         self._init_image_list()
@@ -179,6 +187,21 @@ class MainWindow(AnalysisMixin, FileHandlingMixin, QMainWindow):
         show_ai_action.setChecked(True)
         show_ai_action.toggled.connect(self.chk_show_ai.setChecked)
         self.chk_show_ai.toggled.connect(show_ai_action.setChecked)
+
+        # 显示热力图：菜单 action 与工具栏复选框双向同步
+        show_heatmap_action = analyze_menu.addAction("显示热力图")
+        show_heatmap_action.setCheckable(True)
+        show_heatmap_action.setChecked(False)
+        show_heatmap_action.toggled.connect(
+            lambda checked: self.chk_show_heatmap.setChecked(checked)
+        )
+        self.chk_show_heatmap.toggled.connect(
+            lambda checked: (
+                show_heatmap_action.blockSignals(True),
+                show_heatmap_action.setChecked(checked),
+                show_heatmap_action.blockSignals(False),
+            )
+        )
 
         # ── 帮助 ──────────────────────────────────────────────────────────────
         help_menu = menubar.addMenu("帮助")

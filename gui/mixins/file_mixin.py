@@ -28,11 +28,13 @@ class FileHandlingMixin:
 
     def _load_wsi_at_path(self, file_path):
         """执行切片加载的核心逻辑（立即显示缩略图，后台完成 I/O 测速与画像更新）。"""
-        # 切换切片前，清空 AI 预测框
+        # 切换切片前，清空 AI 预测框与热力图
         for item in self.ai_layer_group.childItems():
             self.ai_layer_group.removeFromGroup(item)
             self.viewer.scene_canvas.removeItem(item)
         self.current_ai_results = []
+        if hasattr(self, "_clear_heatmap"):
+            self._clear_heatmap()
         if hasattr(self, "btn_export"):
             self.btn_export.setEnabled(False)
 

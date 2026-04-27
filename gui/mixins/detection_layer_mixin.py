@@ -23,6 +23,10 @@ class DetectionLayerMixin:
         self.current_ai_results = results
         self.btn_export.setEnabled(len(results) > 0)
 
+        # 通知热力图层更新（可选钩子，依赖 HeatmapMixin）
+        if hasattr(self, "_update_heatmap_layer"):
+            self._update_heatmap_layer()
+
         if self.current_wsi_path:
             db = DatabaseManager()
             db.save_analysis(
@@ -83,8 +87,14 @@ class DetectionLayerMixin:
             self.ai_layer_group.setVisible(True)
 
     def toggle_ai_visibility(self, state):
-        """响应"显示预测框"复选框，切换 AI 图层整体可见性。"""
-        self.ai_layer_group.setVisible(state == Qt.Checked)
+        """响应"显示预测框"复选框，切换 AI 图层整体可见性。
+
+        Note:
+            stateChanged 信号在此 PySide6 版本中发出 int（0=未选, 2=已选），
+            而非 Qt.CheckState 枚举；直接用 bool(state) 转换，避免 enum != int
+            导致比较永远为 False 的问题。
+        """
+        self.ai_layer_group.setVisible(bool(state))
 
     def clear_ai_results(self):
         """清除全部 AI 分析结果、预测框与病灶画廊显示。"""
@@ -107,4 +117,9 @@ class DetectionLayerMixin:
         self.current_ai_results = []
         self.gallery.clear_gallery()
         self.btn_export.setEnabled(False)
+
+        # 同步清空热力图（可选钩子，依赖 HeatmapMixin）
+        if hasattr(self, "_clear_heatmap"):
+            self._clear_heatmap()
+
         self.statusBar().showMessage("已清除分析结果。")
