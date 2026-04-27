@@ -1,3 +1,4 @@
+from .image_list_panel import ImageListPanel
 from .info_bar_overlay import InfoBarOverlay
 from .lesion_gallery import LesionGallery
 from .magnification_widget import MagnificationWidget

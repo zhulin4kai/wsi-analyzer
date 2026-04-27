@@ -255,6 +255,11 @@ class WSIView(QGraphicsView):
 
     def load_wsi(self, file_path):
         """加载 SVS 文件并初始化绝对坐标系"""
+        # 关闭旧引擎，释放 OpenSlide 文件句柄
+        if self.slide_engine:
+            self.slide_engine.close()
+            self.slide_engine = None
+
         try:
             self.slide_engine = WSIDataEngine(file_path)
         except Exception as e:

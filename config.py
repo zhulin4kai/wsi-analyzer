@@ -88,3 +88,7 @@ HUD_MAG_MAX = 40.0  # 允许输入的最大放大倍率（×），对应 Level-0
 HUD_MAG_DEFAULT_OBJECTIVE = 40.0  # 切片无物镜元数据时使用的默认物镜倍率（×）
 HUD_MAG_WIDGET_W = 100  # 控件宽度（像素）
 HUD_MAG_WIDGET_H = 28  # 控件高度（像素）
+
+# 图像列表（ImageListPanel）配置
+IMAGE_LIST_THUMB_W = 80  # 列表项缩略图宽度（像素）
+IMAGE_LIST_THUMB_H = 60  # 列表项缩略图高度（像素）

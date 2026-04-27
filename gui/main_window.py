@@ -11,7 +11,13 @@ from PySide6.QtWidgets import (
 from config import HUD_MARGIN
 from gui.mixins.ai_analysis_mixin import AIAnalysisMixin
 from gui.mixins.file_mixin import FileHandlingMixin
-from gui.widgets import LesionGallery, MinimapView, ReportExporter, WSIView
+from gui.widgets import (
+    ImageListPanel,
+    LesionGallery,
+    MinimapView,
+    ReportExporter,
+    WSIView,
+)
 from gui.widgets.info_bar_overlay import InfoBarOverlay
 from gui.widgets.magnification_widget import MagnificationWidget
 from gui.widgets.scale_bar_overlay import ScaleBarOverlay
@@ -44,6 +50,7 @@ class MainWindow(AIAnalysisMixin, FileHandlingMixin, QMainWindow):
         self._init_ai_ui()
         self._init_minimap_overlay()
         self._init_gallery_ui()
+        self._init_image_list()
         self._init_overlay_hud()
 
         # 4. 绑定信号
@@ -170,6 +177,13 @@ class MainWindow(AIAnalysisMixin, FileHandlingMixin, QMainWindow):
         ReportExporter.export(
             self, self.current_wsi_path, self.current_ai_results, export_format=fmt
         )
+
+    def _init_image_list(self):
+        """初始化左侧图像列表停靠面板"""
+        self.image_list_panel = ImageListPanel(self)
+        self.image_list_panel.image_load_requested.connect(self._load_wsi_at_path)
+        self.image_list_panel.add_requested.connect(self.add_images_to_list)
+        self.addDockWidget(Qt.LeftDockWidgetArea, self.image_list_panel)
 
     def _init_gallery_ui(self):
         """初始化右侧高危病灶画廊"""
