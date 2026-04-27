@@ -92,3 +92,33 @@ HUD_MAG_WIDGET_H = 28  # 控件高度（像素）
 # 图像列表（ImageListPanel）配置
 IMAGE_LIST_THUMB_W = 80  # 列表项缩略图宽度（像素）
 IMAGE_LIST_THUMB_H = 60  # 列表项缩略图高度（像素）
+
+# 热力图叠加层视觉配置
+HEATMAP_BIN_SIZE = 512  # 每个热力格子在 Level-0 的像素边长（建议与 AI_PATCH_SIZE 一致）
+HEATMAP_ALPHA = 180  # 热力图最大不透明度（0-255），零值格子完全透明
+HEATMAP_BLUR_SIGMA = (
+    3.5  # 高斯模糊的 σ（格子单位），设为 0 可禁用模糊；检测稀疏时自动上调
+)
+HEATMAP_COLORMAP = (
+    2  # cv2 伪彩色枚举值：2=JET(蓝→绿→黄→红), 11=HOT, 15=PLASMA, 16=VIRIDIS
+)
+HEATMAP_ALPHA_GAMMA = (
+    2.0  # Alpha 幂函数指数：低值区骤降趋近 0，消除噪点底色；典型范围 1.5~2.5
+)
+
+HEATMAP_MINI_BLUR_SIGMA = (
+    4.0  # 鹰眼图热力叠层 resize 后额外高斯扩散 σ（minimap 像素单位）
+    # 使热点在缩略图上显示得更大；设为 0 可禁用；典型范围 2.0~6.0
+)
+
+# 热力图 LOD（缩放自适应）阈值——m11 即 viewer.transform().m11()
+HEATMAP_LOD_MACRO_THRESH = 0.25  # 低于此值为宏观全片视野，热力图全不透明
+HEATMAP_LOD_MID_THRESH = (
+    0.5  # 低于此值为中等倍率，热力图半透明；高于此值为高倍率，热力图淡出
+)
+
+# 场景图层 Z-index 常量（由低到高：底图 → 瓦片 → 热力图 → 预测框 → ROI 框）
+HEATMAP_Z_VALUE = 500  # 热力图层：叠于所有瓦片之上、预测框之下（瓦片最大 Z ≈ max_levels ≤ 15，取 500 留足余量）
+AI_LAYER_Z_VALUE = (
+    600  # ai_layer_group：修正原先 Z=0 被金字塔瓦片遮挡的问题（ROI 框仍在 1000）
+)

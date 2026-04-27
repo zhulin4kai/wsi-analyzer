@@ -14,6 +14,7 @@ from config import (
     HEATMAP_COLORMAP,
     HEATMAP_LOD_MACRO_THRESH,
     HEATMAP_LOD_MID_THRESH,
+    HEATMAP_MINI_BLUR_SIGMA,
 )
 
 
@@ -282,8 +283,8 @@ class HeatmapMixin:
         gray_u8 = np.clip(grid_norm * 255.0, 0, 255).astype(np.uint8)
 
         # 2. cv2 伪彩色映射 → BGR uint8，shape (H, W, 3)
-        #    HEATMAP_COLORMAP=11 对应 cv2.COLORMAP_HOT（黑→红→橙→黄→白）
-        #    比 JET 更直观：所有可见值均为暖色，零值黑色后设为透明
+        #    HEATMAP_COLORMAP=2 对应 cv2.COLORMAP_JET（蓝→绿→黄→红）
+        #    低密度区为蓝/绿，高密度热点为红色，配合幂函数 alpha 后低值透明
         colormap_bgr = cv2.applyColorMap(gray_u8, int(HEATMAP_COLORMAP))
 
         # 3. BGR → RGBA，shape (H, W, 4)
@@ -356,6 +357,23 @@ class HeatmapMixin:
             (mini_w, mini_h),
             interpolation=cv2.INTER_LINEAR,
         )
+
+        # 鹰眼图专用扩散：对 resize 后的图额外施加高斯模糊，使热点在缩略图上
+        # 显示得更大更明显；RGB 与 Alpha 通道分开处理以保留色彩饱和度。
+        extra_sigma = float(HEATMAP_MINI_BLUR_SIGMA)
+        if extra_sigma > 0:
+            # 核大小：ceil(3σ)×2+1，保证覆盖 99.7% 高斯能量
+            k = int(math.ceil(3.0 * extra_sigma)) * 2 + 1
+            k = max(3, k)
+            # 避免核超过 minimap 短边导致 OpenCV 报错
+            k = min(k, max(3, min(mini_h, mini_w) // 2 * 2 - 1))
+            # 分别模糊 RGB（扩散颜色）与 Alpha（扩散可见范围）
+            mini_rgba[:, :, :3] = cv2.GaussianBlur(
+                mini_rgba[:, :, :3], (k, k), extra_sigma
+            )
+            mini_rgba[:, :, 3] = cv2.GaussianBlur(
+                mini_rgba[:, :, 3], (k, k), extra_sigma
+            )
 
         # 构建 QImage 并深拷贝（脱离 mini_rgba 缓冲区生命周期）
         bytes_per_line = mini_w * 4
