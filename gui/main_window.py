@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (
 )
 
 from config import HUD_MARGIN
-from gui.mixins.ai_analysis_mixin import AIAnalysisMixin
+from gui.mixins.analysis_mixin import AnalysisMixin
 from gui.mixins.file_mixin import FileHandlingMixin
 from gui.widgets import (
     ImageListPanel,
@@ -19,11 +19,10 @@ from gui.widgets import (
     WSIView,
 )
 from gui.widgets.info_bar_overlay import InfoBarOverlay
-from gui.widgets.magnification_widget import MagnificationWidget
 from gui.widgets.scale_bar_overlay import ScaleBarOverlay
 
 
-class MainWindow(AIAnalysisMixin, FileHandlingMixin, QMainWindow):
+class MainWindow(AnalysisMixin, FileHandlingMixin, QMainWindow):
     """主窗口容器"""
 
     def __init__(self):

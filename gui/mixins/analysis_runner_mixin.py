@@ -10,7 +10,7 @@ from utils import DatabaseManager
 from workers import AIAnalysisWorker
 
 
-class AIWorkerMixin:
+class AnalysisRunnerMixin:
     """AIAnalysisWorker 线程的启动、进度对话框管理、ROI 结果融合与取消/错误处理。"""
 
     def _close_progress_dialog(self):

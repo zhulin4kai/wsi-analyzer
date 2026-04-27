@@ -14,7 +14,7 @@ from gui.widgets.magnification_widget import MagnificationWidget
 from utils import DatabaseManager
 
 
-class AIToolbarMixin:
+class AnalysisToolbarMixin:
     """AI 工具栏构建与模型选择/自动调优逻辑。"""
 
     def _init_ai_ui(self):

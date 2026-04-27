@@ -1,9 +1,9 @@
-from gui.mixins.ai_render_mixin import AIRenderMixin
-from gui.mixins.ai_toolbar_mixin import AIToolbarMixin
-from gui.mixins.ai_worker_mixin import AIWorkerMixin
+from gui.mixins.detection_layer_mixin import DetectionLayerMixin
+from gui.mixins.analysis_toolbar_mixin import AnalysisToolbarMixin
+from gui.mixins.analysis_runner_mixin import AnalysisRunnerMixin
 
 
-class AIAnalysisMixin(AIToolbarMixin, AIRenderMixin, AIWorkerMixin):
+class AnalysisMixin(AnalysisToolbarMixin, DetectionLayerMixin, AnalysisRunnerMixin):
     """AI 分析功能组合器，聚合工具栏、渲染与分析执行三个子模块。
 
     主窗口只需继承此类，无需感知内部子模块的划分。

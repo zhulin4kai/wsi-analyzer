@@ -6,7 +6,7 @@ from config import AI_PEN_COLOR, AI_PEN_WIDTH
 from utils import DatabaseManager
 
 
-class AIRenderMixin:
+class DetectionLayerMixin:
     """AI 预测框的绘制、结果持久化及图层可见性控制。"""
 
     def render_ai_results(self, results_dict):
