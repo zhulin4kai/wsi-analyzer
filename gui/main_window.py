@@ -165,11 +165,17 @@ class MainWindow(AIAnalysisMixin, FileHandlingMixin, QMainWindow):
         # 绑定双向联动信号
         self.viewer.view_rect_changed.connect(self.minimap.update_indicator)
         self.minimap.navigate_requested.connect(self.navigate_main_view)
+        self.minimap.navigate_drag_requested.connect(self._on_minimap_drag)
 
     def navigate_main_view(self, cx, cy):
         """鹰眼图向主视图发送跳转请求时的槽函数"""
         self.viewer.centerOn(cx, cy)
         self.viewer._render_high_res_viewport()
+        self.viewer._trigger_view_update()
+
+    def _on_minimap_drag(self, cx, cy):
+        """鹰眼图拖拽时的轻量导航，仅移动视图不触发高清渲染"""
+        self.viewer.centerOn(cx, cy)
         self.viewer._trigger_view_update()
 
     def export_report(self, fmt="csv"):
