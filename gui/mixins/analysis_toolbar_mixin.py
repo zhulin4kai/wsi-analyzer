@@ -1,10 +1,9 @@
 import os
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
-    QCheckBox,
     QFileDialog,
-    QLabel,
     QMenu,
     QPushButton,
     QToolBar,
@@ -27,54 +26,52 @@ class AnalysisToolbarMixin:
         toolbar.addWidget(self.mag_widget)
         toolbar.addSeparator()
 
-        # 1. 开始分析按钮
-        self.btn_analyze = QPushButton("开始全片检测")
-        self.btn_analyze.setMinimumHeight(35)
-        self.btn_analyze.clicked.connect(self.start_ai_analysis)
-        toolbar.addWidget(self.btn_analyze)
+        # 1. 模型配置
+        self.btn_sel_model = QAction("选择模型: 未选择", self)
+        self.btn_sel_model.triggered.connect(self.select_model)
+        toolbar.addAction(self.btn_sel_model)
+        toolbar.addSeparator()
 
-        # 1.5 框选 ROI 分析按钮
-        self.btn_roi_analyze = QPushButton("框选 ROI 分析")
+        # 2. 核心操作
+        self.btn_analyze = QAction("▶ 全片检测", self)
+        self.btn_analyze.triggered.connect(self.start_ai_analysis)
+        toolbar.addAction(self.btn_analyze)
+
+        self.btn_roi_analyze = QAction("ROI 分析", self)
         self.btn_roi_analyze.setCheckable(True)
-        self.btn_roi_analyze.setMinimumHeight(35)
         self.btn_roi_analyze.toggled.connect(self.toggle_roi_mode)
-        toolbar.addWidget(self.btn_roi_analyze)
+        toolbar.addAction(self.btn_roi_analyze)
 
         toolbar.addSeparator()
 
-        # 2. 选择模型按钮
-        self.btn_sel_model = QPushButton("选择模型权重")
-        self.btn_sel_model.setMinimumHeight(35)
-        self.btn_sel_model.clicked.connect(self.select_model)
-        toolbar.addWidget(self.btn_sel_model)
-
-        self.lbl_model = QLabel(" 当前模型: 未选择 ")
-        toolbar.addWidget(self.lbl_model)
-        toolbar.addSeparator()
-
-        # 3. 显隐控制
-        self.chk_show_ai = QCheckBox("显示预测框")
+        # 3. 可视化控制
+        self.chk_show_ai = QAction("预测框", self)
+        self.chk_show_ai.setCheckable(True)
         self.chk_show_ai.setChecked(True)
-        self.chk_show_ai.stateChanged.connect(self.toggle_ai_visibility)
-        toolbar.addWidget(self.chk_show_ai)
+        self.chk_show_ai.toggled.connect(self.toggle_ai_visibility)
+        toolbar.addAction(self.chk_show_ai)
 
         # 4. 导出按钮
-        toolbar.addSeparator()
-        self.btn_export = QPushButton("导出诊断报告")
-        self.btn_export.setMinimumHeight(35)
+        self.export_separator = toolbar.addSeparator()
+        self.btn_export = QPushButton("导出报告 ▾")
         self.btn_export.setEnabled(False)
 
         # 创建导出格式下拉菜单
-        export_menu = QMenu(self.btn_export)
-        action_csv = export_menu.addAction("导出为 CSV")
+        self.export_menu = QMenu(self.btn_export)
+        action_csv = self.export_menu.addAction("导出为 CSV")
         action_csv.triggered.connect(lambda: self.export_report("csv"))
-        action_json = export_menu.addAction("导出为 JSON")
+        action_json = self.export_menu.addAction("导出为 JSON")
         action_json.triggered.connect(lambda: self.export_report("json"))
-        action_geojson = export_menu.addAction("导出为 GeoJSON (QuPath)")
+        action_geojson = self.export_menu.addAction("导出为 GeoJSON (QuPath)")
         action_geojson.triggered.connect(lambda: self.export_report("geojson"))
-        self.btn_export.setMenu(export_menu)
 
-        toolbar.addWidget(self.btn_export)
+        self.btn_export.clicked.connect(
+            lambda: self.export_menu.exec(
+                self.btn_export.mapToGlobal(self.btn_export.rect().bottomLeft())
+            )
+        )
+
+        self.export_action = toolbar.addWidget(self.btn_export)
 
         # 保存工具栏引用，供 HeatmapMixin._init_heatmap_ui() 追加控件使用
         self._ai_toolbar = toolbar
@@ -92,7 +89,7 @@ class AnalysisToolbarMixin:
             return
 
         self.current_model_path = file_path
-        self.lbl_model.setText(f" 当前模型: {os.path.basename(file_path)} ")
+        self.btn_sel_model.setText(f"模型: {os.path.basename(file_path)}")
 
         db = DatabaseManager()
 

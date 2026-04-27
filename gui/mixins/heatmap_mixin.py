@@ -47,11 +47,13 @@ class HeatmapMixin:
         以保证 self._ai_toolbar 已存在且 _init_menu 可访问
         self.chk_show_heatmap。
         """
-        self._ai_toolbar.addSeparator()
-        self.chk_show_heatmap = QCheckBox("显示热力图")
+        from PySide6.QtGui import QAction
+
+        self.chk_show_heatmap = QAction("热力图", self)
+        self.chk_show_heatmap.setCheckable(True)
         self.chk_show_heatmap.setChecked(False)
-        self.chk_show_heatmap.stateChanged.connect(self.toggle_heatmap_visibility)
-        self._ai_toolbar.addWidget(self.chk_show_heatmap)
+        self.chk_show_heatmap.toggled.connect(self.toggle_heatmap_visibility)
+        self._ai_toolbar.insertAction(self.export_separator, self.chk_show_heatmap)
 
         # 方向二：订阅缩放信号，驱动 LOD 透明度自适应
         # zoom_changed 由 WSIView 在每次变换后发出，携带当前 m11 值
@@ -61,21 +63,18 @@ class HeatmapMixin:
     # 可见性控制
     # ------------------------------------------------------------------
 
-    def toggle_heatmap_visibility(self, state):
-        """响应"显示热力图"复选框，切换热力图层整体可见性。
+    def toggle_heatmap_visibility(self, checked):
+        """响应"热力图"开关，切换热力图层整体可见性。
 
         可见性打开时立即应用当前缩放级别的 LOD 透明度，无需等待
         下一次 zoom_changed 信号才能恢复正确的不透明度。
 
         Args:
-            state: stateChanged 信号传入的 int（0=未选, 2=已选）。
-                   注意：此 PySide6 版本中 stateChanged 发出 int 而非
-                   Qt.CheckState 枚举，直接用 bool() 转换，避免 enum != int
-                   的比较永远为 False 的问题。
+            checked: toggled 信号传入的 bool。
         """
         if not hasattr(self, "heatmap_layer_item"):
             return
-        visible = bool(state)
+        visible = bool(checked)
         self.heatmap_layer_item.setVisible(visible)
         # 立即同步 LOD 透明度，防止从隐藏状态重新显示时停留在旧 opacity
         if visible and hasattr(self, "viewer"):

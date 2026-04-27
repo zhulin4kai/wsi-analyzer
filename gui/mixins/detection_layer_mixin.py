@@ -86,15 +86,13 @@ class DetectionLayerMixin:
         if self._was_ai_visible:
             self.ai_layer_group.setVisible(True)
 
-    def toggle_ai_visibility(self, state):
-        """响应"显示预测框"复选框，切换 AI 图层整体可见性。
+    def toggle_ai_visibility(self, checked):
+        """响应"预测框"开关，切换 AI 图层整体可见性。
 
-        Note:
-            stateChanged 信号在此 PySide6 版本中发出 int（0=未选, 2=已选），
-            而非 Qt.CheckState 枚举；直接用 bool(state) 转换，避免 enum != int
-            导致比较永远为 False 的问题。
+        Args:
+            checked: toggled 信号传入的 bool。
         """
-        self.ai_layer_group.setVisible(bool(state))
+        self.ai_layer_group.setVisible(bool(checked))
 
     def clear_ai_results(self):
         """清除全部 AI 分析结果、预测框与病灶画廊显示。"""
