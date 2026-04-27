@@ -45,13 +45,13 @@ class MainWindow(AIAnalysisMixin, FileHandlingMixin, QMainWindow):
         self.ai_layer_group = QGraphicsItemGroup()
         self.viewer.scene_canvas.addItem(self.ai_layer_group)
 
-        # 3. 初始化所有 UI 面板
-        self._init_menu()
+        # 3. 初始化所有 UI 面板（_init_menu 必须最后调用，依赖其他面板已创建）
         self._init_ai_ui()
         self._init_minimap_overlay()
         self._init_gallery_ui()
         self._init_image_list()
         self._init_overlay_hud()
+        self._init_menu()
 
         # 4. 绑定信号
         self.viewer.interaction_started.connect(self._on_interaction_start)
@@ -61,30 +61,161 @@ class MainWindow(AIAnalysisMixin, FileHandlingMixin, QMainWindow):
 
     def _init_menu(self):
         menubar = self.menuBar()
+
+        # ── 文件 ──────────────────────────────────────────────────────────────
         file_menu = menubar.addMenu("文件")
-        open_action = file_menu.addAction("打开 WSI 文件")
-        open_action.setShortcut("Ctrl + O")
+
+        open_action = file_menu.addAction("打开 WSI 文件...")
+        open_action.setShortcut("Ctrl+O")
         open_action.triggered.connect(self.open_file)
 
+        add_action = file_menu.addAction("添加图像到列表...")
+        add_action.triggered.connect(self.add_images_to_list)
+
         file_menu.addSeparator()
-        recent_menu = file_menu.addMenu("最近打开的文件")
-        recent_menu.setEnabled(False)
+
+        export_menu = file_menu.addMenu("导出诊断报告")
+        export_menu.addAction("导出为 CSV").triggered.connect(
+            lambda: self.export_report("csv")
+        )
+        export_menu.addAction("导出为 JSON").triggered.connect(
+            lambda: self.export_report("json")
+        )
+        export_menu.addAction("导出为 GeoJSON (QuPath)").triggered.connect(
+            lambda: self.export_report("geojson")
+        )
+
         file_menu.addSeparator()
-        self.settings_action = file_menu.addAction("系统设置")
+
+        self.settings_action = file_menu.addAction("系统设置...")
         self.settings_action.triggered.connect(self.open_settings)
-        exit_action = file_menu.addAction("退出系统")
-        exit_action.setShortcut("Ctrl + Q")
+
+        file_menu.addSeparator()
+
+        exit_action = file_menu.addAction("退出")
+        exit_action.setShortcut("Ctrl+Q")
         exit_action.triggered.connect(self.close)
 
+        # ── 视图 ──────────────────────────────────────────────────────────────
         view_menu = menubar.addMenu("视图")
-        reset_view = view_menu.addAction("重置视图")
-        reset_view.setShortcut("Ctrl + R")
-        reset_view.triggered.connect(lambda: self.viewer.resetTransform())
 
+        zoom_in_action = view_menu.addAction("放大")
+        zoom_in_action.setShortcut("Ctrl+=")
+        zoom_in_action.triggered.connect(self.viewer.zoom_in)
+
+        zoom_out_action = view_menu.addAction("缩小")
+        zoom_out_action.setShortcut("Ctrl+-")
+        zoom_out_action.triggered.connect(self.viewer.zoom_out)
+
+        reset_action = view_menu.addAction("重置视图")
+        reset_action.setShortcut("Ctrl+R")
+        # 修复：原 resetTransform() 重置为 1:1 导致只能看到切片左上角一小块
+        # 正确行为是复用 load_wsi() 的 fit-to-window 逻辑
+        reset_action.triggered.connect(self.viewer.reset_to_fit)
+
+        view_menu.addSeparator()
+
+        # 面板子菜单：使用 QDockWidget.toggleViewAction() 内建 Action，
+        # 自动维护 check 状态与面板可见性的双向同步
+        panel_menu = view_menu.addMenu("面板")
+        panel_menu.addAction(self.image_list_panel.toggleViewAction())
+        panel_menu.addAction(self.gallery.toggleViewAction())
+
+        # 鹰眼图不是 QDockWidget，手动创建 checkable action
+        minimap_action = panel_menu.addAction("鹰眼图")
+        minimap_action.setCheckable(True)
+        minimap_action.setChecked(self.minimap.isVisible())
+        minimap_action.toggled.connect(self.minimap.setVisible)
+
+        view_menu.addSeparator()
+
+        # HUD 显示开关子菜单
+        hud_menu = view_menu.addMenu("信息显示")
+
+        scalebar_action = hud_menu.addAction("显示比例尺")
+        scalebar_action.setCheckable(True)
+        scalebar_action.setChecked(True)
+        scalebar_action.toggled.connect(self.scale_bar.setVisible)
+
+        infobar_action = hud_menu.addAction("显示坐标信息")
+        infobar_action.setCheckable(True)
+        infobar_action.setChecked(True)
+        infobar_action.toggled.connect(self.info_bar.setVisible)
+
+        mag_action = hud_menu.addAction("显示放大倍率")
+        mag_action.setCheckable(True)
+        mag_action.setChecked(True)
+        mag_action.toggled.connect(self.mag_widget.setVisible)
+
+        # ── 分析 ──────────────────────────────────────────────────────────────
+        analyze_menu = menubar.addMenu("分析")
+
+        analyze_action = analyze_menu.addAction("开始全片检测")
+        analyze_action.triggered.connect(self.start_ai_analysis)
+
+        # ROI 模式：菜单 action 与工具栏按钮双向同步（setChecked 不重发 triggered，无循环风险）
+        roi_action = analyze_menu.addAction("框选 ROI 分析")
+        roi_action.setCheckable(True)
+        roi_action.triggered.connect(self.btn_roi_analyze.setChecked)
+        self.btn_roi_analyze.toggled.connect(roi_action.setChecked)
+
+        analyze_menu.addSeparator()
+
+        cancel_action = analyze_menu.addAction("取消分析")
+        cancel_action.triggered.connect(self.cancel_ai_analysis)
+
+        clear_action = analyze_menu.addAction("清除分析结果")
+        clear_action.triggered.connect(self.clear_ai_results)
+
+        analyze_menu.addSeparator()
+
+        model_action = analyze_menu.addAction("选择模型权重...")
+        model_action.triggered.connect(self.select_model)
+
+        analyze_menu.addSeparator()
+
+        # 显示预测框：菜单 action 与工具栏复选框双向同步
+        show_ai_action = analyze_menu.addAction("显示预测框")
+        show_ai_action.setCheckable(True)
+        show_ai_action.setChecked(True)
+        show_ai_action.toggled.connect(self.chk_show_ai.setChecked)
+        self.chk_show_ai.toggled.connect(show_ai_action.setChecked)
+
+        # ── 帮助 ──────────────────────────────────────────────────────────────
         help_menu = menubar.addMenu("帮助")
+
+        shortcuts_action = help_menu.addAction("快捷键参考")
+        shortcuts_action.triggered.connect(self._show_shortcuts)
+
+        help_menu.addSeparator()
+
         about_action = help_menu.addAction("关于系统")
-        about_action.triggered.connect(
-            lambda: QMessageBox.about(self, "关于", "智能 WSI 病理切片辅助诊断系统")
+        about_action.triggered.connect(self._show_about)
+
+    def _show_shortcuts(self):
+        """显示快捷键参考对话框"""
+        QMessageBox.information(
+            self,
+            "快捷键参考",
+            "Ctrl+O        打开 WSI 文件\n"
+            "Ctrl+Q        退出系统\n"
+            "Ctrl+R        重置视图\n"
+            "Ctrl+=        放大\n"
+            "Ctrl+-        缩小",
+        )
+
+    def _show_about(self):
+        """显示关于对话框"""
+        QMessageBox.about(
+            self,
+            "关于 WSIAnalyzer",
+            "<b>智能 WSI 病理切片辅助诊断系统</b> &nbsp; v1.0<br><br>"
+            "基于深度学习的全切片图像（WSI）病理辅助诊断平台，<br>"
+            "专用于微乳头状癌病灶自动检测与分析。<br><br>"
+            "<b>技术栈</b><br>"
+            "Python &nbsp;·&nbsp; PySide6 &nbsp;·&nbsp; OpenSlide "
+            "&nbsp;·&nbsp; PyTorch &nbsp;·&nbsp; Ultralytics YOLO<br><br>"
+            "© 2024 &nbsp; WSIAnalyzer",
         )
 
     def open_settings(self):

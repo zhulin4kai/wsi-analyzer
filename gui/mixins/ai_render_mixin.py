@@ -85,3 +85,26 @@ class AIRenderMixin:
     def toggle_ai_visibility(self, state):
         """响应"显示预测框"复选框，切换 AI 图层整体可见性。"""
         self.ai_layer_group.setVisible(state == Qt.Checked)
+
+    def clear_ai_results(self):
+        """清除全部 AI 分析结果、预测框与病灶画廊显示。"""
+        if not self.current_ai_results:
+            return
+
+        reply = QMessageBox.question(
+            self,
+            "清除结果",
+            "确定要清除当前的所有分析结果吗？",
+            QMessageBox.Yes | QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
+
+        for item in self.ai_layer_group.childItems():
+            self.ai_layer_group.removeFromGroup(item)
+            self.viewer.scene_canvas.removeItem(item)
+
+        self.current_ai_results = []
+        self.gallery.clear_gallery()
+        self.btn_export.setEnabled(False)
+        self.statusBar().showMessage("已清除分析结果。")

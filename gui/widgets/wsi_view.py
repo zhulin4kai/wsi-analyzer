@@ -496,3 +496,28 @@ class WSIView(QGraphicsView):
     def _trigger_view_update(self):
         """在缩放和滚动后调用此方法发射信号"""
         self.view_rect_changed.emit(self.get_visible_rect())
+
+    def zoom_in(self):
+        """以视口中心为锚点放大视图一档"""
+        if not self.slide_engine:
+            return
+        self.set_scale(min(self.transform().m11() * 1.25, 1.0))
+
+    def zoom_out(self):
+        """以视口中心为锚点缩小视图一档"""
+        if not self.slide_engine:
+            return
+        self.set_scale(max(self.transform().m11() * 0.8, 1e-4))
+
+    def reset_to_fit(self):
+        """将视图重置至适合窗口的初始缩放状态"""
+        if not self.slide_engine:
+            return
+        w, h = self.slide_engine.level_0_dim
+        self.resetTransform()
+        view_rect = self.viewport().rect()
+        initial_scale = min(view_rect.width() / w, view_rect.height() / h) * 0.95
+        self.scale(initial_scale, initial_scale)
+        self.zoom_changed.emit(self.transform().m11())
+        self.view_rect_changed.emit(self.get_visible_rect())
+        self._render_high_res_viewport()
