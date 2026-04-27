@@ -8,6 +8,11 @@ from PySide6.QtWidgets import (
     QGraphicsView,
 )
 
+# Z 值层级常量（minimap 内部）
+_Z_BG = 0.0  # 缩略图底图
+_Z_HEATMAP = 0.5  # 热力图叠层（介于底图与视口指示器之间）
+_Z_INDICATOR = 1.0  # 红色视口指示框（最顶层）
+
 
 class MinimapView(QGraphicsView):
     # 点击缩略图时发送 Level 0 坐标（鼠标释放时触发，附带高清渲染）
@@ -34,10 +39,17 @@ class MinimapView(QGraphicsView):
 
         # 1. 底图层 (静态缩略图)
         self.bg_item = QGraphicsPixmapItem()
+        self.bg_item.setZValue(_Z_BG)
         self.scene_canvas.addItem(self.bg_item)
 
-        # 2. 视口指示器层 (红色边框)
+        # 2. 热力图叠层（方向三：介于底图与视口指示器之间）
+        self.heatmap_mini_item = QGraphicsPixmapItem()
+        self.heatmap_mini_item.setZValue(_Z_HEATMAP)
+        self.scene_canvas.addItem(self.heatmap_mini_item)
+
+        # 3. 视口指示器层 (红色边框，显式置顶确保不被热力图遮挡)
         self.indicator = QGraphicsRectItem()
+        self.indicator.setZValue(_Z_INDICATOR)
         pen = QPen(QColor(255, 0, 0, 220))
         pen.setWidth(2)
         pen.setCosmetic(True)  # 保持线宽不受缩放影响
@@ -53,6 +65,9 @@ class MinimapView(QGraphicsView):
         )
 
         self.bg_item.setPixmap(QPixmap.fromImage(ImageQt(thumb_img)))
+
+        # 切换切片时清空旧热力图，避免上一张切片的热力图残留显示
+        self.heatmap_mini_item.setPixmap(QPixmap())
 
         # 根据切片比例计算缩略图尺寸
         max_size = 250.0  # 以250像素为最大边长基准
