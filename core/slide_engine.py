@@ -1,3 +1,5 @@
+from typing import Optional, Tuple
+
 import openslide
 
 
@@ -57,6 +59,35 @@ class WSIDataEngine:
     def read_region(self, location, level, size):
         """提供 OpenSlide 的读取接口"""
         return self.slide.read_region(location, level, size)
+
+    def get_mpp(self) -> Optional[Tuple[float, float]]:
+        """
+        返回切片的物理分辨率 (mpp_x, mpp_y)，单位：微米/像素 (μm/px)。
+        若元数据缺失则返回 None。
+        """
+        try:
+            mpp_x = float(self.slide.properties.get(openslide.PROPERTY_NAME_MPP_X, 0))
+            mpp_y = float(self.slide.properties.get(openslide.PROPERTY_NAME_MPP_Y, 0))
+            if mpp_x > 0 and mpp_y > 0:
+                return mpp_x, mpp_y
+        except (ValueError, TypeError):
+            pass
+        return None
+
+    def get_objective_power(self) -> Optional[float]:
+        """
+        返回切片的物镜倍率（如 20.0、40.0）。
+        若元数据缺失则返回 None。
+        """
+        try:
+            power = self.slide.properties.get(
+                openslide.PROPERTY_NAME_OBJECTIVE_POWER, None
+            )
+            if power is not None:
+                return float(power)
+        except (ValueError, TypeError):
+            pass
+        return None
 
     def close(self):
         self.slide.close()

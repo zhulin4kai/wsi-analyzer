@@ -65,3 +65,26 @@ AI_MAX_PATCHES_LIMIT = 100000
 
 # ROI 靶向分析专属配置
 ROI_STRIDE_RATIO = 0.5
+
+# HUD 叠加层视觉配置
+# 颜色以 RGBA 元组存储，widget 文件中通过 QColor(*tuple) 构造
+HUD_BG_COLOR = (20, 20, 20, 150)  # 半透明深色背景
+HUD_FG_COLOR = (240, 240, 240, 255)  # 主要文字（亮白）
+HUD_DIM_COLOR = (180, 180, 180, 255)  # 辅助文字（灰白）
+
+# HUD 布局配置
+HUD_PADDING = 10  # 控件内边距（像素）
+HUD_MARGIN = 12  # 控件距视图边缘的外边距（像素）
+
+# 比例尺（ScaleBarOverlay）配置
+HUD_SCALE_BAR_TARGET_PX = 150  # 目标比例尺屏幕宽度（像素），取整后实际宽度会略有差异
+
+# 坐标信息栏（InfoBarOverlay）配置
+HUD_INFO_SWATCH_SIZE = 14  # RGB 预览色块边长（像素）
+HUD_INFO_RGB_DEBOUNCE_MS = 150  # RGB 精确采样防抖延迟（毫秒）
+
+# 工具栏放大倍率控件（MagnificationWidget）配置
+HUD_MAG_MAX = 40.0  # 允许输入的最大放大倍率（×），对应 Level-0 原始分辨率
+HUD_MAG_DEFAULT_OBJECTIVE = 40.0  # 切片无物镜元数据时使用的默认物镜倍率（×）
+HUD_MAG_WIDGET_W = 100  # 控件宽度（像素）
+HUD_MAG_WIDGET_H = 28  # 控件高度（像素）

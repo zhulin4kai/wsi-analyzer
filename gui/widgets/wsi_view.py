@@ -29,6 +29,11 @@ class WSIView(QGraphicsView):
     interaction_finished = Signal()
     roi_drawn = Signal(tuple)
 
+    # HUD 相关信号
+    zoom_changed = Signal(float)  # 缩放比例变化（m11 值）
+    mouse_scene_pos_changed = Signal(float, float)  # 鼠标 Scene 坐标变化
+    wsi_loaded = Signal(object)  # 切片加载完成，携带 slide_engine
+
     def __init__(self, parent=None):
         super().__init__(parent)
 
@@ -284,8 +289,14 @@ class WSIView(QGraphicsView):
 
         self.scale(initial_scale, initial_scale)
 
+        # 通知 HUD：初始缩放比例
+        self.zoom_changed.emit(self.transform().m11())
+
         # 请求首次渲染
         self._render_high_res_viewport()
+
+        # 通知 HUD：切片加载完成
+        self.wsi_loaded.emit(self.slide_engine)
 
     # ==================== 模块 B: 交互事件重写 ====================
     def wheelEvent(self, event):
@@ -311,6 +322,9 @@ class WSIView(QGraphicsView):
 
         # 执行缩放
         self.scale(zoom_factor, zoom_factor)
+
+        # 通知 HUD：缩放比例已更新
+        self.zoom_changed.emit(self.transform().m11())
 
         # 重置防抖定时器
         self.render_timer.start()
@@ -376,6 +390,11 @@ class WSIView(QGraphicsView):
             # 平移时重置防抖定时器
             self.render_timer.start()
             self.view_rect_changed.emit(self.get_visible_rect())
+        # 始终上报鼠标的 Scene 坐标（驱动 HUD 信息栏实时更新）
+        if self.slide_engine:
+            scene_pos = self.mapToScene(event.position().toPoint())
+            self.mouse_scene_pos_changed.emit(scene_pos.x(), scene_pos.y())
+
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
@@ -436,6 +455,35 @@ class WSIView(QGraphicsView):
         self._request_high_res_render()
 
     # ==================== 模块 D: 鹰眼图 ====================
+    def set_scale(self, target_scale: float):
+        """
+        设置绝对缩放比例（m11 值），以视口中心为锚点。
+        由 MagnificationWidget.zoom_to_scale 信号触发。
+
+        :param target_scale: 目标 m11 值，范围 [1e-4, 1.0]
+        """
+        if not self.slide_engine:
+            return
+        current = self.transform().m11()
+        if current <= 0:
+            return
+
+        # 与 wheelEvent 保持一致：最大缩放至 Level-0 原始分辨率
+        clamped = max(1e-4, min(float(target_scale), 1.0))
+        factor = clamped / current
+        if abs(factor - 1.0) < 1e-9:
+            return
+
+        # 程序化跳转以视口中心为锚点，而非鼠标位置
+        old_anchor = self.transformationAnchor()
+        self.setTransformationAnchor(QGraphicsView.AnchorViewCenter)
+        self.scale(factor, factor)
+        self.setTransformationAnchor(old_anchor)
+
+        self.zoom_changed.emit(self.transform().m11())
+        self.render_timer.start()
+        self.view_rect_changed.emit(self.get_visible_rect())
+
     def get_visible_rect(self):
         """获取当前主视图处于 Level 0 坐标系下的可见矩形区域"""
         return self.mapToScene(self.viewport().rect()).boundingRect()

@@ -8,9 +8,13 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from config import HUD_MARGIN
 from gui.mixins.ai_analysis_mixin import AIAnalysisMixin
 from gui.mixins.file_mixin import FileHandlingMixin
 from gui.widgets import LesionGallery, MinimapView, ReportExporter, WSIView
+from gui.widgets.info_bar_overlay import InfoBarOverlay
+from gui.widgets.magnification_widget import MagnificationWidget
+from gui.widgets.scale_bar_overlay import ScaleBarOverlay
 
 
 class MainWindow(AIAnalysisMixin, FileHandlingMixin, QMainWindow):
@@ -40,11 +44,13 @@ class MainWindow(AIAnalysisMixin, FileHandlingMixin, QMainWindow):
         self._init_ai_ui()
         self._init_minimap_overlay()
         self._init_gallery_ui()
+        self._init_overlay_hud()
 
         # 4. 绑定信号
         self.viewer.interaction_started.connect(self._on_interaction_start)
         self.viewer.interaction_finished.connect(self._on_interaction_finish)
         self.viewer.roi_drawn.connect(self.start_roi_analysis)
+        self.viewer.wsi_loaded.connect(self._on_wsi_loaded)
 
     def _init_menu(self):
         menubar = self.menuBar()
@@ -87,6 +93,52 @@ class MainWindow(AIAnalysisMixin, FileHandlingMixin, QMainWindow):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
+        if hasattr(self, "scale_bar"):
+            self._reposition_hud()
+
+    def _init_overlay_hud(self):
+        """初始化 HUD 叠加层：左下角比例尺 + 右下角坐标信息栏。"""
+        self.scale_bar = ScaleBarOverlay(self.viewer)
+        self.info_bar = InfoBarOverlay(self.viewer)
+
+        # 绑定 WSIView 信号
+        self.viewer.zoom_changed.connect(self.scale_bar.on_zoom_changed)
+        self.viewer.mouse_scene_pos_changed.connect(self.info_bar.on_mouse_moved)
+
+        # 绑定工具栏放大倍率控件信号（mag_widget 由 AIToolbarMixin._init_ai_ui 创建）
+        self.viewer.zoom_changed.connect(self.mag_widget.on_zoom_changed)
+        self.mag_widget.zoom_to_scale.connect(self.viewer.set_scale)
+
+    def _on_wsi_loaded(self, engine):
+        """切片加载完成后，向 HUD 控件注入元数据并完成初始定位。"""
+        mpp = engine.get_mpp()
+        mpp_x = mpp[0] if mpp else None
+        mpp_y = mpp[1] if mpp else None
+        obj_power = engine.get_objective_power()
+
+        # 比例尺仅需物理分辨率
+        self.scale_bar.load(mpp_x, mpp_y)
+        self.info_bar.load(engine, mpp_x, mpp_y)
+
+        # 工具栏倍率控件注入物镜倍率，并刷新初始显示
+        self.mag_widget.load(obj_power)
+
+        current_scale = self.viewer.transform().m11()
+        self.scale_bar.on_zoom_changed(current_scale)
+        self.mag_widget.on_zoom_changed(current_scale)
+
+        self._reposition_hud()
+
+    def _reposition_hud(self):
+        """将 HUD 控件定位到视图的左下角和右下角。"""
+        vw = self.viewer.width()
+        vh = self.viewer.height()
+        margin = HUD_MARGIN
+
+        sb = self.scale_bar
+        ib = self.info_bar
+        sb.move(margin, vh - sb.height() - margin)
+        ib.move(vw - ib.width() - margin, vh - ib.height() - margin)
 
     def _init_minimap_overlay(self):
         """初始化鹰眼图悬浮层"""

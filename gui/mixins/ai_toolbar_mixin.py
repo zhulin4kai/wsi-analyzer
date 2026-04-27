@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QToolBar,
 )
 
+from gui.widgets.magnification_widget import MagnificationWidget
 from utils import DatabaseManager
 
 
@@ -20,6 +21,11 @@ class AIToolbarMixin:
         """初始化顶部工具栏"""
         toolbar = QToolBar("AI 辅助分析")
         self.addToolBar(Qt.TopToolBarArea, toolbar)
+
+        # 0. 放大倍率显示/输入控件（视图导航区）
+        self.mag_widget = MagnificationWidget()
+        toolbar.addWidget(self.mag_widget)
+        toolbar.addSeparator()
 
         # 1. 开始分析按钮
         self.btn_analyze = QPushButton("开始全片检测")
