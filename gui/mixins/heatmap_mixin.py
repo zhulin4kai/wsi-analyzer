@@ -3,7 +3,7 @@ from typing import Tuple
 
 import cv2
 import numpy as np
-from PySide6.QtGui import QImage, QPixmap, QTransform
+from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import QCheckBox
 
 from config import (
@@ -316,20 +316,21 @@ class HeatmapMixin:
     def _update_minimap_heatmap(self, rgba: np.ndarray) -> None:
         """将热力图 rgba 数组缩放到鹰眼图尺寸并更新 heatmap_mini_item。
 
-        关键设计：resize 目标为鹰眼图 widget 的**显示像素尺寸**（约 160~250px），
-        而非 bg_item.pixmap() 的缩略图原始像素尺寸（可能高达 1500px+）。
-        这样 HEATMAP_MINI_BLUR_SIGMA 的单位与视觉像素对齐，sigma=8 就意味着
-        热点在屏幕上扩散约 ±8px，不会因缩略图分辨率过高而被稀释成一个小点。
+        两步 resize 策略：
+          1. 先将 rgba grid 缩放到 widget 显示像素尺寸（约 160~250px）并施加
+             高斯扩散。在此尺寸上 blur，HEATMAP_MINI_BLUR_SIGMA 的单位与
+             视觉像素直接对齐，sigma=8 即屏幕上 ±8px 的热点半径。
+          2. 再将模糊后的小图上采样回缩略图原始像素尺寸（与 bg_item.pixmap()
+             等大），直接 setPixmap 即可完美对齐，无需任何 QTransform。
 
-        坐标系修正：
-          pixmap 是以 widget 显示尺寸生成的（小图），但 scene 坐标系以缩略图
-          原始像素为单位。通过 QTransform.fromScale(sx, sy) 将 item 缩放回
-          正确的 scene 尺寸，保证热力叠层与 bg_item 完美对齐。
+        不使用 setTransform 的原因：
+          QGraphicsPixmapItem 的 boundingRect 始终以 pixmap 原始尺寸计算，
+          若 pixmap 远小于 scene 尺寸，场景裁剪会认为 item 不在可视区域而
+          跳过渲染，导致热力图完全不显示。
 
         防御策略：
           - bg_item pixmap 为空（切片未加载）→ 跳过。
-          - minimap.width() / height() 为 0（widget 未完成布局）→ 回退到
-            bg_item 像素尺寸（sigma 此时视觉效果不佳，但不崩溃）。
+          - widget 尺寸为 0（布局未完成）→ 回退到 250px 目标尺寸估算。
           - rgba 格式异常 → 跳过。
 
         Args:
@@ -345,53 +346,45 @@ class HeatmapMixin:
         if rgba is None or rgba.ndim != 3 or rgba.shape[2] != 4:
             return
 
-        # scene 坐标参考：缩略图原始像素尺寸（可能 1000~1500px）
+        # 缩略图原始像素尺寸（scene 坐标与 bg_item 等大，可能 1000~1500px）
         thumb_size = self.minimap.bg_item.pixmap().size()
         if thumb_size.isEmpty():
             return
+        thumb_w, thumb_h = thumb_size.width(), thumb_size.height()
 
-        # 显示像素尺寸：widget 实际渲染尺寸（约 160~250px）
-        # 若 widget 尚未完成布局（width=0），回退到缩略图尺寸
+        # 获取 widget 显示像素尺寸（约 160~250px），用于确定 blur 的视觉尺度
         vis_w = self.minimap.width()
         vis_h = self.minimap.height()
         if vis_w <= 0 or vis_h <= 0:
-            vis_w, vis_h = thumb_size.width(), thumb_size.height()
+            # 布局尚未完成时，按 250px 最大边估算 widget 尺寸
+            scale = 250.0 / max(thumb_w, thumb_h)
+            vis_w = max(1, int(thumb_w * scale))
+            vis_h = max(1, int(thumb_h * scale))
 
-        # Step 1: 将 rgba grid 缩放到 widget 显示尺寸（小图，约 160~250px）
-        # 在此尺寸上 blur，sigma 的单位与视觉像素直接对应
-        mini_rgba = cv2.resize(
-            rgba,
-            (vis_w, vis_h),
-            interpolation=cv2.INTER_LINEAR,
-        )
+        # Step 1: 缩放到 widget 显示尺寸，blur 在此小图上以视觉像素为单位施加
+        small = cv2.resize(rgba, (vis_w, vis_h), interpolation=cv2.INTER_LINEAR)
 
-        # Step 2: 额外高斯扩散，在显示像素空间施加，使热点视觉上更大更明显
-        # RGB 与 Alpha 分开处理以保留色彩饱和度
         extra_sigma = float(HEATMAP_MINI_BLUR_SIGMA)
         if extra_sigma > 0:
-            # 核大小：ceil(3σ)×2+1，覆盖 99.7% 高斯能量
             k = int(math.ceil(3.0 * extra_sigma)) * 2 + 1
             k = max(3, k)
-            # 防止核超过图像短边
             k = min(k, max(3, min(vis_h, vis_w) // 2 * 2 - 1))
-            mini_rgba[:, :, :3] = cv2.GaussianBlur(
-                mini_rgba[:, :, :3], (k, k), extra_sigma
-            )
-            mini_rgba[:, :, 3] = cv2.GaussianBlur(
-                mini_rgba[:, :, 3], (k, k), extra_sigma
-            )
+            small[:, :, :3] = cv2.GaussianBlur(small[:, :, :3], (k, k), extra_sigma)
+            small[:, :, 3] = cv2.GaussianBlur(small[:, :, 3], (k, k), extra_sigma)
 
-        # Step 3: 构建 QImage/QPixmap（显示尺寸小图，深拷贝脱离 numpy 缓冲区）
-        bytes_per_line = vis_w * 4
+        # Step 2: 上采样回缩略图尺寸（与 bg_item pixmap 等大）
+        # pixmap 尺寸 == bg_item 尺寸 → scene 坐标天然对齐，无需 QTransform
+        mini_rgba = cv2.resize(
+            small, (thumb_w, thumb_h), interpolation=cv2.INTER_LINEAR
+        )
+
+        # Step 3: 构建 QImage/QPixmap，深拷贝脱离 numpy 缓冲区生命周期
+        bytes_per_line = thumb_w * 4
         mini_qi = QImage(
-            mini_rgba.data, vis_w, vis_h, bytes_per_line, QImage.Format_RGBA8888
+            mini_rgba.data, thumb_w, thumb_h, bytes_per_line, QImage.Format_RGBA8888
         ).copy()
 
+        # 清除可能残留的旧 transform（防止历史 setTransform 调用留下脏状态）
+        self.minimap.heatmap_mini_item.resetTransform()
         self.minimap.heatmap_mini_item.setPixmap(QPixmap.fromImage(mini_qi))
         self.minimap.heatmap_mini_item.setPos(0.0, 0.0)
-
-        # Step 4: 用 QTransform 将显示尺寸的 pixmap 缩放回 scene 坐标尺寸，
-        # 使热力叠层与 bg_item（缩略图原始像素尺寸）完美对齐
-        sx = thumb_size.width() / vis_w
-        sy = thumb_size.height() / vis_h
-        self.minimap.heatmap_mini_item.setTransform(QTransform.fromScale(sx, sy))
