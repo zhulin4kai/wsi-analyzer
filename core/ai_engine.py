@@ -11,6 +11,7 @@ from tqdm import tqdm
 import config
 from core import WSIDataEngine
 from core.model_adapters import ModelAdapterFactory
+from core.roi_manager import ROIManager
 from utils import logger
 from utils.db_manager import DatabaseManager
 from utils.hardware_profiler import HardwareProfiler
@@ -83,6 +84,11 @@ class WSIAnalyzer:
             self.device = HardwareProfiler.get_compute_device()
             self.batch_size = 16
 
+        # 强制限制读取的旧配置，防止遗留的极大 batch_size 导致 Windows 下卡死
+        self.batch_size = min(
+            self.batch_size, getattr(config, "BATCH_SIZE_CAP_NVME_SSD", 64)
+        )
+
         logger.info(f"[*] 使用计算设备: {self.device}, Batch Size: {self.batch_size}")
 
         self._is_cancelled = False
@@ -149,7 +155,12 @@ class WSIAnalyzer:
         return valid_coords
 
     def _batch_inference(
-        self, valid_coords, total_patches=0, processed_patches=0, progress_callback=None
+        self,
+        valid_coords,
+        total_patches=0,
+        processed_patches=0,
+        progress_callback=None,
+        is_roi=False,
     ):
         global_boxes = []
         global_scores = []
@@ -162,15 +173,6 @@ class WSIAnalyzer:
         while i < len(valid_coords):
             if self._is_cancelled:
                 break
-
-            # 显存溢出预检测
-            if self.device in ["cuda", "mps"]:
-                _, free_vram = HardwareProfiler.get_vram_info(self.device)
-                if free_vram < (self.batch_size * config.VRAM_PER_TILE_MB + 300.0):
-                    logger.warning(
-                        f"检测到可用显存较低 ({free_vram:.1f}MB)，自动缩减 batch_size"
-                    )
-                    self.batch_size = max(1, self.batch_size // 2)
 
             batch_coords = valid_coords[i : i + self.batch_size]
             i += len(batch_coords)
@@ -256,7 +258,14 @@ class WSIAnalyzer:
             )
         return final_results
 
-    def process(self, resume_data=None, progress_callback=None, status_callback=None):
+    def process(
+        self,
+        resume_data=None,
+        progress_callback=None,
+        status_callback=None,
+        roi_bbox=None,
+        is_roi=False,
+    ):
         """处理推理逻辑并通过回调更新状态"""
         self._is_cancelled = False
 
@@ -266,7 +275,25 @@ class WSIAnalyzer:
         valid_coords = []
         processed_patches = 0
 
-        if resume_data and resume_data.get("valid_coords"):
+        if roi_bbox:
+            if status_callback:
+                status_callback("阶段 1/2: 正在提取组织掩码并计算 ROI 靶向分析坐标...")
+
+            solid_mask, downsample_factor = self._generate_solid_mask(
+                target_level=getattr(config, "AI_MASK_TARGET_LEVEL", 3)
+            )
+            roi_stride = int(self.patch_size * getattr(config, "ROI_STRIDE_RATIO", 0.5))
+            W, H = self.level_0_dim
+            valid_coords = ROIManager.generate_roi_coordinates(
+                roi_bbox,
+                self.patch_size,
+                roi_stride,
+                W,
+                H,
+                solid_mask=solid_mask,
+                downsample_factor=downsample_factor,
+            )
+        elif resume_data and resume_data.get("valid_coords"):
             if status_callback:
                 status_callback("阶段 1/4: 发现断点缓存，跳过掩码生成...")
             valid_coords = resume_data["valid_coords"]
@@ -331,8 +358,9 @@ class WSIAnalyzer:
         remaining_coords = valid_coords[processed_patches:]
 
         if status_callback:
+            phase_str = "阶段 2/2" if roi_bbox else "阶段 3/4"
             status_callback(
-                f"阶段 3/4: 开始模型推理 (共 {total_patches} 个图像块，剩余 {len(remaining_coords)} 个)..."
+                f"{phase_str}: 开始模型推理 (共 {total_patches} 个图像块，剩余 {len(remaining_coords)} 个)..."
             )
 
         new_boxes, new_scores, new_classes, current_processed = self._batch_inference(
@@ -340,6 +368,7 @@ class WSIAnalyzer:
             total_patches=total_patches,
             processed_patches=processed_patches,
             progress_callback=progress_callback,
+            is_roi=is_roi,
         )
 
         global_boxes.extend(new_boxes)

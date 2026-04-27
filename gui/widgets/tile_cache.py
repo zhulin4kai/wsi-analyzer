@@ -8,7 +8,7 @@ class TileLRUCache:
     管理内存中的图块，避免内存溢出。
     """
 
-    def __init__(self, max_capacity: int = 500):
+    def __init__(self, max_capacity: int = 1024):
         """
         初始化 LRU 缓存池。
         :param max_capacity: 缓存图块的最大数量

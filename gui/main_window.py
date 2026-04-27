@@ -57,6 +57,7 @@ class MainWindow(QMainWindow):
         # 4. 绑定信号
         self.viewer.interaction_started.connect(self._on_interaction_start)
         self.viewer.interaction_finished.connect(self._on_interaction_finish)
+        self.viewer.roi_drawn.connect(self.start_roi_analysis)
 
     def _init_menu(self):
         menubar = self.menuBar()
@@ -391,14 +392,21 @@ class MainWindow(QMainWindow):
                         f"已从本地数据库加载 {len(results)} 个病灶。"
                     )
 
-    def render_ai_results(self, results_dict):
-        """渲染预测结果"""
-        if hasattr(self, "progress_dialog"):
+    def _close_progress_dialog(self):
+        """断开取消信号后安全关闭进度对话框。
+        QProgressDialog.closeEvent 会主动 emit canceled() 信号，若不提前断开
+        会意外触发 cancel_ai_analysis，导致确认框在分析正常结束后再次弹出。
+        """
+        if hasattr(self, "progress_dialog") and self.progress_dialog:
             try:
                 self.progress_dialog.canceled.disconnect(self.cancel_ai_analysis)
             except Exception:
                 pass
             self.progress_dialog.close()
+
+    def render_ai_results(self, results_dict):
+        """渲染预测结果"""
+        self._close_progress_dialog()
 
         results = results_dict.get("results", [])
         status = results_dict.get("status", "completed")
@@ -406,28 +414,7 @@ class MainWindow(QMainWindow):
         processed_patches = results_dict.get("processed_patches", 0)
         total_patches = results_dict.get("total_patches", 0)
 
-        # 清空旧数据
-        for item in self.ai_layer_group.childItems():
-            self.ai_layer_group.removeFromGroup(item)
-            self.viewer.scene_canvas.removeItem(item)
-
-        # 遍历生成 QGraphicsRectItem
-        for data in results:
-            x_min, y_min, x_max, y_max = data["bbox"]
-            rect_item = QGraphicsRectItem(
-                QRectF(x_min, y_min, x_max - x_min, y_max - y_min)
-            )
-
-            # 固定线宽模式保证在全景缩小下可见
-            pen = QPen(QColor(*AI_PEN_COLOR))
-            pen.setWidth(AI_PEN_WIDTH)
-            pen.setCosmetic(True)
-            rect_item.setPen(pen)
-            rect_item.setToolTip(f"微乳头状癌病灶\n置信度: {data['confidence']:.2%}")
-            self.ai_layer_group.addToGroup(rect_item)
-
-        # 保存结果并启用导出按钮
-        self.ai_layer_group.setVisible(self.chk_show_ai.isChecked())
+        self._draw_ai_boxes(results)
         self.current_ai_results = results
         self.btn_export.setEnabled(len(results) > 0)
 
@@ -455,6 +442,26 @@ class MainWindow(QMainWindow):
         # 开始生成画廊缩略图
         self.gallery.load_results(self.current_wsi_path, results)
 
+    def _draw_ai_boxes(self, results):
+        """清空旧预测框并根据传入结果在 Scene 上重新绘制。"""
+        for item in self.ai_layer_group.childItems():
+            self.ai_layer_group.removeFromGroup(item)
+            self.viewer.scene_canvas.removeItem(item)
+
+        for data in results:
+            x_min, y_min, x_max, y_max = data["bbox"]
+            rect_item = QGraphicsRectItem(
+                QRectF(x_min, y_min, x_max - x_min, y_max - y_min)
+            )
+            pen = QPen(QColor(*AI_PEN_COLOR))
+            pen.setWidth(AI_PEN_WIDTH)
+            pen.setCosmetic(True)
+            rect_item.setPen(pen)
+            rect_item.setToolTip(f"微乳头状癌病灶\n置信度: {data['confidence']:.2%}")
+            self.ai_layer_group.addToGroup(rect_item)
+
+        self.ai_layer_group.setVisible(self.chk_show_ai.isChecked())
+
     # LOD 动态视觉控制
     def _on_interaction_start(self):
         """交互开始，隐藏部分图层以提升渲染性能"""
@@ -480,6 +487,13 @@ class MainWindow(QMainWindow):
         self.btn_analyze.setMinimumHeight(35)
         self.btn_analyze.clicked.connect(self.start_ai_analysis)
         toolbar.addWidget(self.btn_analyze)
+
+        # 1.5 框选 ROI 分析按钮
+        self.btn_roi_analyze = QPushButton("框选 ROI 分析")
+        self.btn_roi_analyze.setCheckable(True)
+        self.btn_roi_analyze.setMinimumHeight(35)
+        self.btn_roi_analyze.toggled.connect(self.toggle_roi_mode)
+        toolbar.addWidget(self.btn_roi_analyze)
 
         toolbar.addSeparator()
 
@@ -650,6 +664,97 @@ class MainWindow(QMainWindow):
         self.progress_dialog.show()
         self.ai_thread.start()
 
+    def toggle_roi_mode(self, checked):
+        if hasattr(self, "ai_thread") and self.ai_thread and self.ai_thread.isRunning():
+            self.btn_roi_analyze.setChecked(False)
+            QMessageBox.warning(
+                self, "警告", "后台 AI 分析正在进行中，请先等待或取消当前任务。"
+            )
+            return
+        self.viewer.toggle_roi_mode(checked)
+
+    def start_roi_analysis(self, roi_coords):
+        self.btn_roi_analyze.setChecked(False)
+        self.viewer.toggle_roi_mode(False)
+
+        if not getattr(self, "current_model_path", None):
+            self.viewer.clear_roi_box()
+            QMessageBox.warning(
+                self, "警告", "请先选择 AI 模型权重文件 (.pt / .onnx)！"
+            )
+            return
+
+        self.btn_analyze.setEnabled(False)
+        self.btn_roi_analyze.setEnabled(False)
+        self.settings_action.setEnabled(False)
+        self.btn_export.setEnabled(False)
+
+        self.progress_dialog = QProgressDialog(
+            "正在进行局部 ROI AI 检测...", "取消", 0, 100, self
+        )
+        self.progress_dialog.setWindowTitle("分析进度")
+        self.progress_dialog.setWindowModality(Qt.NonModal)
+        self.progress_dialog.setAutoClose(False)
+        self.progress_dialog.setAutoReset(False)
+        self.progress_dialog.setValue(0)
+        self.progress_dialog.canceled.connect(self.cancel_ai_analysis)
+
+        self.ai_thread = AIAnalysisWorker(
+            svs_path=self.current_wsi_path,
+            model_path=self.current_model_path,
+            resume_data=None,
+            roi_bbox=roi_coords,
+        )
+
+        self.ai_thread.progress_updated.connect(self.progress_dialog.setValue)
+        self.ai_thread.status_updated.connect(self.statusBar().showMessage)
+        self.ai_thread.analysis_finished.connect(self.on_ai_finished_roi)
+        self.ai_thread.error_occurred.connect(self.handle_ai_error)
+        self.ai_thread.finished.connect(lambda: self.btn_analyze.setEnabled(True))
+        self.ai_thread.finished.connect(lambda: self.btn_roi_analyze.setEnabled(True))
+        self.ai_thread.finished.connect(lambda: self.settings_action.setEnabled(True))
+        self.ai_thread.finished.connect(lambda: self.btn_export.setEnabled(True))
+
+        self.progress_dialog.show()
+        self.ai_thread.start()
+
+    def on_ai_finished_roi(self, results_dict):
+        """处理局部 ROI 分析完成后的数据合并与 UI 更新"""
+        self._close_progress_dialog()
+        self.viewer.clear_roi_box()
+
+        status = results_dict.get("status")
+        if status == "completed":
+            self.statusBar().showMessage("局部 ROI 分析完成")
+
+            new_results = results_dict.get("results", [])
+            if not new_results:
+                QMessageBox.information(self, "提示", "未在该区域检测到病灶。")
+                return
+
+            db = DatabaseManager()
+            nms_iou_thresh = db.get_setting("ai_nms_iou_thresh", 0.25)
+
+            from core.roi_manager import ROIManager
+
+            current_results = getattr(self, "current_ai_results", [])
+            fused_results = ROIManager.fuse_results(
+                current_results, new_results, nms_iou_thresh
+            )
+
+            self.current_ai_results = fused_results
+            self.gallery.load_results(self.current_wsi_path, self.current_ai_results)
+            self._draw_ai_boxes(self.current_ai_results)
+            self.btn_export.setEnabled(len(self.current_ai_results) > 0)
+
+            QMessageBox.information(
+                self,
+                "完成",
+                f"局部 ROI 分析完成！合并后共检测到 {len(self.current_ai_results)} 个病灶。",
+            )
+        else:
+            self.statusBar().showMessage("局部 ROI 分析被中断")
+
     def cancel_ai_analysis(self):
         if getattr(self, "_is_canceling", False):
             return
@@ -661,6 +766,14 @@ class MainWindow(QMainWindow):
             return
 
         self._is_canceling = True
+
+        # 在弹出确认框前先断开信号，防止 QProgressDialog 在 QMessageBox.exec()
+        # 运行期间再次触发 canceled 信号导致确认框二次弹出
+        if hasattr(self, "progress_dialog"):
+            try:
+                self.progress_dialog.canceled.disconnect(self.cancel_ai_analysis)
+            except Exception:
+                pass
 
         msg_box = QMessageBox(self)
         msg_box.setWindowTitle("取消确认")
@@ -679,6 +792,8 @@ class MainWindow(QMainWindow):
                 current_val = self.progress_dialog.value()
                 self.progress_dialog.reset()
                 self.progress_dialog.setValue(current_val)
+                # 用户选择继续，重新连接取消信号
+                self.progress_dialog.canceled.connect(self.cancel_ai_analysis)
                 # 延迟执行 show()，避开 QProgressDialog 在触发 close 事件后的自动隐藏机制
                 from PySide6.QtCore import QTimer
 
@@ -687,12 +802,11 @@ class MainWindow(QMainWindow):
         self._is_canceling = False
 
     def handle_ai_error(self, err_msg):
-        if hasattr(self, "progress_dialog"):
-            try:
-                self.progress_dialog.canceled.disconnect(self.cancel_ai_analysis)
-            except Exception:
-                pass
-            self.progress_dialog.close()
+        self._close_progress_dialog()
+
+        if hasattr(self, "viewer"):
+            self.viewer.clear_roi_box()
+
         self.statusBar().showMessage("分析失败或被中断。")
         QMessageBox.critical(self, "AI 引擎错误", err_msg)
 

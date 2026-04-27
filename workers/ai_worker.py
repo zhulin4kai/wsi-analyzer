@@ -13,11 +13,14 @@ class AIAnalysisWorker(QThread):
     analysis_finished = Signal(dict)
     error_occurred = Signal(str)
 
-    def __init__(self, svs_path, model_path, resume_data=None, parent=None):
+    def __init__(
+        self, svs_path, model_path, resume_data=None, roi_bbox=None, parent=None
+    ):
         super().__init__(parent)
         self.svs_path = svs_path
         self.model_path = model_path
         self.resume_data = resume_data
+        self.roi_bbox = roi_bbox
         self.analyzer = None
 
     def cancel(self):
@@ -68,6 +71,8 @@ class AIAnalysisWorker(QThread):
                 resume_data=self.resume_data,
                 progress_callback=lambda p: self.progress_updated.emit(p),
                 status_callback=lambda s: self.status_updated.emit(s),
+                roi_bbox=self.roi_bbox,
+                is_roi=(self.roi_bbox is not None),
             )
 
             if results_dict is None or (

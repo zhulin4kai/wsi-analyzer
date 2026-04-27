@@ -13,6 +13,7 @@ from core import WSIDataEngine
 from utils.logger import logger
 from workers import RenderWorker
 
+from .roi_box_item import ROIBoxItem
 from .tile_cache import TileLRUCache
 
 TILE_SIZE = 512
@@ -26,6 +27,7 @@ class WSIView(QGraphicsView):
     view_rect_changed = Signal(QRectF)
     interaction_started = Signal()
     interaction_finished = Signal()
+    roi_drawn = Signal(tuple)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -58,6 +60,11 @@ class WSIView(QGraphicsView):
         # 交互状态
         self._is_panning = False
         self._last_mouse_pos = None
+
+        # ROI 状态
+        self._is_roi_mode = False
+        self._roi_start_pos = None
+        self._current_roi_item = None
 
         # 用于避免连续滚动或拖拽时高频重复发射 interaction_started 信号
         self._is_interaction = False
@@ -309,20 +316,51 @@ class WSIView(QGraphicsView):
         self.render_timer.start()
         self.view_rect_changed.emit(self.get_visible_rect())
 
+    def toggle_roi_mode(self, enabled: bool):
+        """Toggles the Region of Interest (ROI) drawing mode."""
+        self._is_roi_mode = enabled
+        if enabled:
+            self.setCursor(Qt.CrossCursor)
+        else:
+            self.setCursor(Qt.ArrowCursor)
+
+    def clear_roi_box(self):
+        """清除当前绘制的 ROI 框"""
+        if self._current_roi_item and self._current_roi_item.scene():
+            self.scene_canvas.removeItem(self._current_roi_item)
+            self._current_roi_item = None
+
     def mousePressEvent(self, event):
         """重写鼠标按下：开启平移"""
         if event.button() == Qt.LeftButton and self.slide_engine:
-            # 记录鼠标按下的交互状态
-            self._mark_interaction()
-            self._is_panning = True
-            self._last_mouse_pos = event.position().toPoint()
-            self.setCursor(Qt.ClosedHandCursor)
+            if self._is_roi_mode:
+                self._roi_start_pos = self.mapToScene(event.position().toPoint())
+                if self._current_roi_item and self._current_roi_item.scene():
+                    self.scene_canvas.removeItem(self._current_roi_item)
+
+                self._current_roi_item = ROIBoxItem()
+                self.scene_canvas.addItem(self._current_roi_item)
+                self._current_roi_item.update_rect(
+                    self._roi_start_pos, self._roi_start_pos
+                )
+            else:
+                # 记录鼠标按下的交互状态
+                self._mark_interaction()
+                self._is_panning = True
+                self._last_mouse_pos = event.position().toPoint()
+                self.setCursor(Qt.ClosedHandCursor)
 
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
         """重写鼠标移动：计算偏移量并调整滚动条实现平移"""
-        if self._is_panning:
+        if self._is_roi_mode and self._roi_start_pos is not None:
+            current_scene_pos = self.mapToScene(event.position().toPoint())
+            if self._current_roi_item:
+                self._current_roi_item.update_rect(
+                    self._roi_start_pos, current_scene_pos
+                )
+        elif self._is_panning:
             self._mark_interaction()
 
             current_pos = event.position().toPoint()
@@ -343,10 +381,16 @@ class WSIView(QGraphicsView):
     def mouseReleaseEvent(self, event):
         """重写鼠标释放：结束平移"""
         if event.button() == Qt.LeftButton:
-            self._is_panning = False
-            self.setCursor(Qt.ArrowCursor)
-            self.idle_timer.start()
-            self.render_timer.start()
+            if self._is_roi_mode and self._roi_start_pos is not None:
+                if self._current_roi_item:
+                    roi_coords = self._current_roi_item.get_roi_coordinates()
+                    self.roi_drawn.emit(roi_coords)
+                self._roi_start_pos = None
+            else:
+                self._is_panning = False
+                self.setCursor(Qt.ArrowCursor)
+                self.idle_timer.start()
+                self.render_timer.start()
         super().mouseReleaseEvent(event)
 
     def _on_absolute_idle(self):
