@@ -30,9 +30,15 @@ class ImageListPanel(QDockWidget):
     add_requested = Signal()
 
     def __init__(self, parent=None):
-        super().__init__("图像列表", parent)
+        super().__init__("切片列表", parent)
         self.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
         self.setMinimumWidth(200)
+
+        # 停靠时不显示关闭按钮，浮动时显示
+        self.setFeatures(
+            QDockWidget.DockWidgetFloatable | QDockWidget.DockWidgetMovable
+        )
+        self.topLevelChanged.connect(self._on_top_level_changed)
 
         # 已添加的文件绝对路径列表（保持与列表项一一对应的顺序）
         self._entries = []
@@ -70,6 +76,24 @@ class ImageListPanel(QDockWidget):
         layout.addWidget(self.search_bar)
 
         self.setWidget(container)
+
+    def _on_top_level_changed(self, floating: bool):
+        """悬浮时显示关闭按钮，停靠时隐藏关闭按钮"""
+        if floating:
+            self.setFeatures(
+                QDockWidget.DockWidgetFloatable
+                | QDockWidget.DockWidgetMovable
+                | QDockWidget.DockWidgetClosable
+            )
+        else:
+            self.setFeatures(
+                QDockWidget.DockWidgetFloatable | QDockWidget.DockWidgetMovable
+            )
+
+    def closeEvent(self, event):
+        """点击悬浮窗关闭按钮时归位至停靠区域，而非隐藏"""
+        self.setFloating(False)
+        event.ignore()
 
     def add_image(self, file_path: str):
         """将单个 WSI 文件路径加入列表（自动去重）。"""

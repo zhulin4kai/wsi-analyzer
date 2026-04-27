@@ -72,6 +72,12 @@ class LesionGallery(QDockWidget):
         # 设置最小宽度以防止内容遮挡
         self.setMinimumWidth(320)
 
+        # 停靠时不显示关闭按钮，浮动时显示
+        self.setFeatures(
+            QDockWidget.DockWidgetFloatable | QDockWidget.DockWidgetMovable
+        )
+        self.topLevelChanged.connect(self._on_top_level_changed)
+
         # 初始化垂直列表视图（一行一个，左图右文）
         self.list_widget = QListWidget()
         self.list_widget.setViewMode(QListWidget.ListMode)
@@ -83,6 +89,24 @@ class LesionGallery(QDockWidget):
 
         self.gallery_worker = None
         self.current_wsi_path = None
+
+    def _on_top_level_changed(self, floating: bool):
+        """悬浮时显示关闭按钮，停靠时隐藏关闭按钮"""
+        if floating:
+            self.setFeatures(
+                QDockWidget.DockWidgetFloatable
+                | QDockWidget.DockWidgetMovable
+                | QDockWidget.DockWidgetClosable
+            )
+        else:
+            self.setFeatures(
+                QDockWidget.DockWidgetFloatable | QDockWidget.DockWidgetMovable
+            )
+
+    def closeEvent(self, event):
+        """点击悬浮窗关闭按钮时归位至停靠区域，而非隐藏"""
+        self.setFloating(False)
+        event.ignore()
 
     def load_results(self, wsi_path: str, results: list):
         """
