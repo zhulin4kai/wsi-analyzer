@@ -37,6 +37,9 @@ class ProfileWorker(QThread):
 
             db = DatabaseManager()
 
+            # 注意：此处刻意绕过 ImageServer / SlidePool，使用独立引擎句柄做 I/O 冷读测速。
+            # 若改用 ImageServer.get_thumbnail()，SlidePool 中已热的引擎会省略文件打开耗时，
+            # 导致 I/O 速度测量值偏高，进而使 EMA 进化算法的参数基准失真。
             def init_and_thumb(fp):
                 engine = WSIDataEngine(fp)
                 img, _ = engine.get_thumbnail()

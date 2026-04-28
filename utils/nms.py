@@ -5,11 +5,6 @@ def nms_numpy(
     boxes: np.ndarray, scores: np.ndarray, iou_threshold: float
 ) -> np.ndarray:
     """
-    纯 NumPy 实现的贪心非极大值抑制 (Greedy Non-Maximum Suppression)。
-
-    可完全替代 torchvision.ops.nms，无任何 GPU / torch 依赖。
-    返回格式与 torchvision.ops.nms 保持一致：保留框的索引数组（按置信度降序排列）。
-
     :param boxes:         shape (N, 4)  [x1, y1, x2, y2]  float32，像素坐标
     :param scores:        shape (N,)    float32，每个框的置信度得分
     :param iou_threshold: IoU 阈值，超过该值的重叠框将被抑制

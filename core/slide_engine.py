@@ -32,23 +32,6 @@ class WSIDataEngine:
 
         return thumb_img, downsample_factor
 
-    def calculate_render_params(
-        self, rect_left, rect_top, rect_width, rect_height, target_downsample
-    ):
-        """
-        根据当前视口计算 OpenSlide 截取参数
-        :return: loc_x, loc_y, best_level, size_w, size_h, level_downsample
-        """
-        best_level = self.slide.get_best_level_for_downsample(target_downsample)
-        level_downsample = self.slide.level_downsamples[best_level]
-
-        loc_x = int(rect_left)
-        loc_y = int(rect_top)
-        size_w = int(rect_width / level_downsample)
-        size_h = int(rect_height / level_downsample)
-
-        return loc_x, loc_y, best_level, size_w, size_h, level_downsample
-
     def get_level_info(self, target_level):
         """为 AI 引擎提供指定层级的基本信息"""
         level = min(target_level, self.slide.level_count - 1)

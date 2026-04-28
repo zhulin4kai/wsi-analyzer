@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
 )
 
 from config import AI_LAYER_Z_VALUE, HEATMAP_Z_VALUE, HUD_MARGIN
+from core.image_server import ImageServer
 from gui.mixins.analysis_mixin import AnalysisMixin
 from gui.mixins.file_mixin import FileHandlingMixin
 from gui.widgets import (
@@ -251,6 +252,10 @@ class MainWindow(AnalysisMixin, FileHandlingMixin, QMainWindow):
             dlg.apply_settings()
             QMessageBox.information(self, "设置成功", "设置已保存。")
 
+    def closeEvent(self, event):
+        ImageServer.instance().shutdown()
+        super().closeEvent(event)
+
     def resizeEvent(self, event):
         super().resizeEvent(event)
         if hasattr(self, "scale_bar"):
@@ -269,25 +274,26 @@ class MainWindow(AnalysisMixin, FileHandlingMixin, QMainWindow):
         self.viewer.zoom_changed.connect(self.mag_widget.on_zoom_changed)
         self.mag_widget.zoom_to_scale.connect(self.viewer.set_scale)
 
-    def _on_wsi_loaded(self, engine):
+    def _on_wsi_loaded(self, metadata):
         """切片加载完成后，向 HUD 控件注入元数据并完成初始定位。"""
-        mpp = engine.get_mpp()
+        mpp = metadata.mpp
         mpp_x = mpp[0] if mpp else None
         mpp_y = mpp[1] if mpp else None
-        obj_power = engine.get_objective_power()
 
-        # 比例尺仅需物理分辨率
         self.scale_bar.load(mpp_x, mpp_y)
-        self.info_bar.load(engine, mpp_x, mpp_y)
+        self.info_bar.load(metadata)
 
-        # 工具栏倍率控件注入物镜倍率，并刷新初始显示
-        self.mag_widget.load(obj_power)
+        self.mag_widget.load(metadata.objective_power)
 
         current_scale = self.viewer.transform().m11()
         self.scale_bar.on_zoom_changed(current_scale)
         self.mag_widget.on_zoom_changed(current_scale)
 
         self._reposition_hud()
+
+        # 预热相邻切片（利用加载完成后的 I/O 空闲期）
+        if hasattr(self, "image_list_panel"):
+            self.image_list_panel.preload_adjacent(metadata.path)
 
     def _reposition_hud(self):
         """将 HUD 控件定位到视图的左下角和右下角。"""

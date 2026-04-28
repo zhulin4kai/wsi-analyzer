@@ -5,7 +5,7 @@ assets/*
 .wsi_cache/
 current_wsi_analysis.json
 logs/*.log
-docs/*
+docs
 *.pyc
 __pycache__/
 deployment/*

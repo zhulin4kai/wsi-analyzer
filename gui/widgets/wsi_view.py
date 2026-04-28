@@ -1,3 +1,5 @@
+import math
+
 from PIL.ImageQt import ImageQt
 from PySide6.QtCore import QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QPainter, QPixmap
@@ -9,19 +11,22 @@ from PySide6.QtWidgets import (
 )
 
 from config import IDLE_THRESHOLD_MS, RENDER_DEBOUNCE_MS
-from core import WSIDataEngine
+from core.image_server import ImageServer, SlideMetadata
+from core.tile_cache import TileLRUCache
 from utils.logger import logger
 from workers import RenderWorker
 
 from .roi_box_item import ROIBoxItem
-from .tile_cache import TileLRUCache
 
 TILE_SIZE = 512
 
 
 class WSIView(QGraphicsView):
     """
-    视口组件：负责处理鼠标交互（平移、缩放）并调度渲染
+    视口组件：处理鼠标交互（平移、缩放）并调度瓦片渲染。
+
+    不直接持有 WSIDataEngine。通过 ImageServer 获取元数据、像素数据
+    及缩略图；引擎生命周期由 ImageServer.SlidePool 统一管理。
     """
 
     view_rect_changed = Signal(QRectF)
@@ -29,96 +34,81 @@ class WSIView(QGraphicsView):
     interaction_finished = Signal()
     roi_drawn = Signal(tuple)
 
-    # HUD 相关信号
-    zoom_changed = Signal(float)  # 缩放比例变化（m11 值）
-    mouse_scene_pos_changed = Signal(float, float)  # 鼠标 Scene 坐标变化
-    wsi_loaded = Signal(object)  # 切片加载完成，携带 slide_engine
+    zoom_changed = Signal(float)
+    mouse_scene_pos_changed = Signal(float, float)
+    wsi_loaded = Signal(object)  # SlideMetadata
 
     def __init__(self, parent=None):
         super().__init__(parent)
 
-        # 1. 初始化场景 (Scene)
         self.scene_canvas = QGraphicsScene(self)
         self.setScene(self.scene_canvas)
 
-        # 底图铺垫层
         self.bg_layer_item = QGraphicsPixmapItem()
         self.bg_layer_item.setZValue(-1)
         self.scene_canvas.addItem(self.bg_layer_item)
 
-        # 2. 渲染载体：瓦片缓存池
+        # 场景项 LRU 缓存；每次切换切片时清空
         self.tile_cache = TileLRUCache(max_capacity=500)
 
-        # 3. 视图设置
         self.setRenderHint(QPainter.Antialiasing)
-        self.setRenderHint(QPainter.SmoothPixmapTransform)  # 开启平滑插值
-        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)  # 隐藏滚动条
+        self.setRenderHint(QPainter.SmoothPixmapTransform)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-
-        # 缩放锚点：以鼠标指针当前位置为中心进行缩放
         self.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)
 
-        # 4. 后端引擎与状态变量
-        self.slide_engine = None
-        self._current_qimg = None  # 保持对当前 QImage 的引用，避免垃圾回收导致异常
+        # Current slide state — replaces direct slide_engine ownership
+        self._current_path: str | None = None
+        self._metadata: SlideMetadata | None = None
+        self._current_qimg = None  # Retain QImage ref to prevent GC during render
 
-        # 交互状态
+        # Interaction state
         self._is_panning = False
         self._last_mouse_pos = None
+        self._is_interaction = False
 
-        # ROI 状态
+        # ROI state
         self._is_roi_mode = False
         self._roi_start_pos = None
         self._current_roi_item = None
 
-        # 用于避免连续滚动或拖拽时高频重复发射 interaction_started 信号
-        self._is_interaction = False
-
-        # 异步渲染管理
-        # 5. 渲染防抖定时器
-        # 记录当前请求的版本号
         self.render_version = 0
 
-        # 启动后台渲染线程
         self.render_worker = RenderWorker(self)
         self.render_worker.image_ready.connect(self._on_image_ready)
         self.render_worker.start()
 
-        # 1. 渲染触发定时器
-        # 用于定时触发高清图渲染请求
+        # Debounce high-res render after interaction ends
         self.render_timer = QTimer()
         self.render_timer.setSingleShot(True)
-        self.render_timer.setInterval(RENDER_DEBOUNCE_MS)  # 50ms 间隔
+        self.render_timer.setInterval(RENDER_DEBOUNCE_MS)
         self.render_timer.timeout.connect(self._request_high_res_render)
 
-        # 2. 静止状态定时器
-        # 在交互完全结束后，允许绘制额外的 UI 图层
+        # Detect absolute idle to finalize interaction state
         self.idle_timer = QTimer()
         self.idle_timer.setSingleShot(True)
-        self.idle_timer.setInterval(IDLE_THRESHOLD_MS)  # 交互结束阈值
+        self.idle_timer.setInterval(IDLE_THRESHOLD_MS)
         self.idle_timer.timeout.connect(self._on_absolute_idle)
 
-    def _mark_interaction(self):
-        """管理交互状态"""
-        # 1. 重置静止定时器
-        self.idle_timer.start()
+    # ==================== Interaction state ====================
 
-        # 2. 如果当前不在交互状态，进入交互并通知主界面
+    def _mark_interaction(self):
+        self.idle_timer.start()
         if not self._is_interaction:
             self._is_interaction = True
             self.interaction_started.emit()
 
+    # ==================== Render pipeline ====================
+
     def _request_high_res_render(self):
-        """
-        由定时器触发，计算坐标并提交渲染任务。
-        """
+        """Compute visible tile grid and route each tile through three cache levels."""
 
         def finish_interaction_early():
             if self._is_interaction:
                 self._is_interaction = False
                 self.interaction_finished.emit()
 
-        if not self.slide_engine:
+        if not self._current_path or not self._metadata:
             finish_interaction_early()
             return
 
@@ -133,32 +123,22 @@ class WSIView(QGraphicsView):
         current_scale = self.transform().m11()
         target_downsample = 1.0 / current_scale
 
-        # 获取最适合的层级
-        best_level = self.slide_engine.slide.get_best_level_for_downsample(
-            target_downsample
-        )
-        level_downsample = self.slide_engine.slide.level_downsamples[best_level]
-        level_dim = self.slide_engine.slide.level_dimensions[best_level]
+        best_level = self._metadata.get_best_level_for_downsample(target_downsample)
+        level_downsample = self._metadata.level_downsamples[best_level]
+        level_dim = self._metadata.level_dimensions[best_level]
 
-        # 仅隐藏比当前需要的层级【分辨率更高】（即 level 值更小）的瓦片
-        # 保留比它【分辨率更低】（level 值更大）的瓦片作为缓冲背景，避免闪烁和马赛克
+        # 隐藏高分辨率已缓存瓦片，避免切换层级时的 z-fighting 渲染冲突
         for key, item in self.tile_cache._cache.items():
             cached_level = key[0]
-            if cached_level < best_level:
-                item.setVisible(False)
-            else:
-                item.setVisible(True)
+            item.setVisible(cached_level >= best_level)
 
-        # 递增版本号，表示发起了一次新的渲染批次
         self.render_version += 1
 
-        # 计算视口覆盖的瓦片网格范围（增加边缘缓冲）
         start_col = int((intersected_rect.left() / level_downsample) // TILE_SIZE) - 1
         end_col = int((intersected_rect.right() / level_downsample) // TILE_SIZE) + 1
         start_row = int((intersected_rect.top() / level_downsample) // TILE_SIZE) - 1
         end_row = int((intersected_rect.bottom() / level_downsample) // TILE_SIZE) + 1
 
-        # 限制在实际层级的有效范围内
         max_col = (level_dim[0] - 1) // TILE_SIZE
         max_row = (level_dim[1] - 1) // TILE_SIZE
 
@@ -171,214 +151,195 @@ class WSIView(QGraphicsView):
             for col in range(start_col, end_col + 1):
                 key = (best_level, col, row)
 
-                # 检查缓存是否命中
+                # Level 1：场景项 LRU 缓存（无 I/O）
                 cached_item = self.tile_cache.get(key)
                 if cached_item:
-                    # 缓存命中，确保图块可见
                     if not cached_item.scene():
                         self.scene_canvas.addItem(cached_item)
                     cached_item.setVisible(True)
-                else:
-                    # 缓存未命中，需要派发任务给后台读取
-                    tile_w = TILE_SIZE
-                    tile_h = TILE_SIZE
+                    continue
 
-                    # 处理边缘瓦片
-                    if col == max_col:
-                        tile_w = level_dim[0] - col * TILE_SIZE
-                    if row == max_row:
-                        tile_h = level_dim[1] - row * TILE_SIZE
+                abs_x = col * TILE_SIZE * level_downsample
+                abs_y = row * TILE_SIZE * level_downsample
+                tile_w = level_dim[0] - col * TILE_SIZE if col == max_col else TILE_SIZE
+                tile_h = level_dim[1] - row * TILE_SIZE if row == max_row else TILE_SIZE
 
-                    # 计算在 Level 0 (Scene 绝对坐标系) 中的真实位置
-                    abs_x = col * TILE_SIZE * level_downsample
-                    abs_y = row * TILE_SIZE * level_downsample
-
-                    self.render_worker.request_render(
-                        self.slide_engine,
+                # Level 2：跨切片像素数据缓存（无 I/O，重访时命中可跳过磁盘读取）
+                cached_qimg = ImageServer.instance().get_tile(
+                    self._current_path, best_level, col, row
+                )
+                if cached_qimg is not None:
+                    self._add_tile_to_scene(
+                        cached_qimg,
                         best_level,
                         col,
                         row,
                         int(abs_x),
                         int(abs_y),
-                        int(tile_w),
-                        int(tile_h),
                         level_downsample,
-                        self.render_version,
                     )
+                    continue
 
-        # 我们只需结束交互。
+                # Level 3：派发后台 I/O 任务
+                # 优先级：中心瓦片优先渲染（数值越小优先级越高）
+                viewport_center = visible_scene_rect.center()
+                tile_center_x = abs_x + tile_w * level_downsample * 0.5
+                tile_center_y = abs_y + tile_h * level_downsample * 0.5
+                dist = math.hypot(
+                    tile_center_x - viewport_center.x(),
+                    tile_center_y - viewport_center.y(),
+                )
+                priority_score = dist / max(level_downsample, 1e-6)
+
+                self.render_worker.request_render(
+                    self._current_path,
+                    best_level,
+                    col,
+                    row,
+                    int(abs_x),
+                    int(abs_y),
+                    int(tile_w),
+                    int(tile_h),
+                    level_downsample,
+                    self.render_version,
+                    priority=priority_score,
+                )
+
         finish_interaction_early()
 
-    def _on_image_ready(self, version, level, col, row, qimg, x, y, scale):
-        """
-        接收后台线程返回的瓦片数据。
-        """
-        # 检查任务版本，丢弃过期任务
-        if version < self.render_version:
-            return
-
+    def _add_tile_to_scene(self, qimg, level, col, row, x, y, scale):
+        """Convert QImage → QGraphicsPixmapItem and insert into scene + scene-item cache."""
         key = (level, col, row)
-
-        # 检查缓存是否存在重复图块
         if self.tile_cache.contains(key):
             return
-
-        # 创建 QGraphicsPixmapItem 载体
         pixmap = QPixmap.fromImage(qimg)
         item = QGraphicsPixmapItem(pixmap)
         item.setPos(x, y)
         item.setScale(scale)
-
-        # 严格按金字塔层级分布 Z-index，高分辨率永远覆盖低分辨率
-        max_levels = len(self.slide_engine.slide.level_dimensions)
-        z_value = max_levels - level
-        item.setZValue(z_value)
-
-        # 添加到 Scene
+        # Higher resolution (lower level index) renders on top
+        item.setZValue(self._metadata.level_count - level)
         self.scene_canvas.addItem(item)
+        evicted = self.tile_cache.put(key, item)
+        if evicted and evicted.scene():
+            self.scene_canvas.removeItem(evicted)
 
-        # 存入 LRU 缓存，并获取可能被淘汰的最老瓦片
-        evicted_item = self.tile_cache.put(key, item)
-        if evicted_item and evicted_item.scene():
-            self.scene_canvas.removeItem(evicted_item)
-
-        # 检查交互状态并展示瓦片
+    def _on_image_ready(self, path, version, level, col, row, qimg, x, y, scale):
+        # Discard results from a previous slide or a superseded render batch
+        if path != self._current_path:
+            return
+        if version < self.render_version:
+            return
+        key = (level, col, row)
+        if self.tile_cache.contains(key):
+            return
+        self._add_tile_to_scene(qimg, level, col, row, x, y, scale)
         if self._is_interaction:
             self._is_interaction = False
             self.interaction_finished.emit()
 
     def closeEvent(self, event):
-        """关闭窗口时退出线程"""
         if hasattr(self, "render_worker"):
-            self.render_worker.stop()
+            self.render_worker.shutdown()
         super().closeEvent(event)
 
     def load_wsi(self, file_path):
-        """加载 SVS 文件并初始化绝对坐标系"""
+        """Switch to a new slide. Engine lifecycle is fully delegated to ImageServer.SlidePool."""
+        # Stop pending tasks; a large version jump marks in-flight tasks as stale
         self.render_timer.stop()
-        self.render_worker.stop()  # 清空待执行队列
-        self.render_version += 1000  # 大步跳版本，令所有旧任务立即视为过期
+        self.render_version += 1000
+        self.render_worker.set_version(self.render_version)  # sync scheduler version
+        self.render_worker.stop()  # clear queued tasks
 
-        old_engine = self.slide_engine
-        self.slide_engine = None  # 先置 None，阻止新的渲染请求使用旧引擎
-
-        if old_engine:
-            # 延迟关闭：600ms 后执行，给 in-flight 的 read_region 留足完成时间
-            QTimer.singleShot(600, old_engine.close)
+        # Nullify state so any late _on_image_ready calls are silently discarded
+        self._current_path = None
+        self._metadata = None
 
         try:
-            self.slide_engine = WSIDataEngine(file_path)
+            metadata = ImageServer.instance().get_metadata(file_path)
         except Exception as e:
             QMessageBox.critical(self, "错误", f"无法打开文件:\n{e}")
             return
 
-        # 获取 Level 0 的绝对物理尺寸
-        w, h = self.slide_engine.level_0_dim
+        w, h = metadata.level_0_dim
         self.scene_canvas.setSceneRect(0, 0, w, h)
         self.resetTransform()
 
-        # 清空旧的瓦片缓存
+        # 清空场景项；跨切片的 TileDataCache 刻意保留，重访时可跳过磁盘 I/O
         old_items = self.tile_cache.clear()
         for item in old_items:
             if item.scene():
                 self.scene_canvas.removeItem(item)
 
         try:
-            thumb_img, downsample_factor = self.slide_engine.get_thumbnail(
-                level_from_last=2
+            thumb_img, downsample_factor = ImageServer.instance().get_thumbnail(
+                file_path, level_from_last=2
             )
             self.bg_layer_item.setPixmap(QPixmap.fromImage(ImageQt(thumb_img)))
             self.bg_layer_item.setScale(downsample_factor)
         except Exception as e:
             logger.error(f"宏观底图加载失败: {e}")
 
-        # 计算初始缩放比例
         view_rect = self.viewport().rect()
         scale_w = view_rect.width() / w
         scale_h = view_rect.height() / h
-        initial_scale = min(scale_w, scale_h) * 0.95  # 预留边距
-
+        initial_scale = min(scale_w, scale_h) * 0.95
         self.scale(initial_scale, initial_scale)
 
-        # 通知 HUD：初始缩放比例
+        # 所有准备工作完成后才激活新的切片状态
+        self._current_path = file_path
+        self._metadata = metadata
+
         self.zoom_changed.emit(self.transform().m11())
-
-        # 请求首次渲染
         self._render_high_res_viewport()
+        self.wsi_loaded.emit(metadata)
 
-        # 通知 HUD：切片加载完成
-        self.wsi_loaded.emit(self.slide_engine)
-
-    # ==================== 模块 B: 交互事件重写 ====================
     def wheelEvent(self, event):
-        """重写滚轮事件：实现基于鼠标锚点的平滑缩放"""
-        if not self.slide_engine:
+        if not self._current_path:
             return
-
-        # 触发交互开始信号
         self._mark_interaction()
 
-        # 每次滚动的缩放步长
         zoom_factor = 1.15
         if event.angleDelta().y() < 0:
             zoom_factor = 1.0 / zoom_factor
 
-        # 计算未来的缩放比例
         current_scale = self.transform().m11()
         new_scale = current_scale * zoom_factor
-
-        # 限制缩放范围
         if new_scale > 1.0:
             zoom_factor = 1.0 / current_scale
 
-        # 执行缩放
         self.scale(zoom_factor, zoom_factor)
-
-        # 通知 HUD：缩放比例已更新
         self.zoom_changed.emit(self.transform().m11())
-
-        # 重置防抖定时器
         self.render_timer.start()
         self.view_rect_changed.emit(self.get_visible_rect())
 
     def toggle_roi_mode(self, enabled: bool):
-        """Toggles the Region of Interest (ROI) drawing mode."""
         self._is_roi_mode = enabled
-        if enabled:
-            self.setCursor(Qt.CrossCursor)
-        else:
-            self.setCursor(Qt.ArrowCursor)
+        self.setCursor(Qt.CrossCursor if enabled else Qt.ArrowCursor)
 
     def clear_roi_box(self):
-        """清除当前绘制的 ROI 框"""
         if self._current_roi_item and self._current_roi_item.scene():
             self.scene_canvas.removeItem(self._current_roi_item)
             self._current_roi_item = None
 
     def mousePressEvent(self, event):
-        """重写鼠标按下：开启平移"""
-        if event.button() == Qt.LeftButton and self.slide_engine:
+        if event.button() == Qt.LeftButton and self._current_path:
             if self._is_roi_mode:
                 self._roi_start_pos = self.mapToScene(event.position().toPoint())
                 if self._current_roi_item and self._current_roi_item.scene():
                     self.scene_canvas.removeItem(self._current_roi_item)
-
                 self._current_roi_item = ROIBoxItem()
                 self.scene_canvas.addItem(self._current_roi_item)
                 self._current_roi_item.update_rect(
                     self._roi_start_pos, self._roi_start_pos
                 )
             else:
-                # 记录鼠标按下的交互状态
                 self._mark_interaction()
                 self._is_panning = True
                 self._last_mouse_pos = event.position().toPoint()
                 self.setCursor(Qt.ClosedHandCursor)
-
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
-        """重写鼠标移动：计算偏移量并调整滚动条实现平移"""
         if self._is_roi_mode and self._roi_start_pos is not None:
             current_scene_pos = self.mapToScene(event.position().toPoint())
             if self._current_roi_item:
@@ -387,29 +348,23 @@ class WSIView(QGraphicsView):
                 )
         elif self._is_panning:
             self._mark_interaction()
-
             current_pos = event.position().toPoint()
             delta = current_pos - self._last_mouse_pos
             self._last_mouse_pos = current_pos
-
-            # 通过滚动条实现画布平移
             h_bar = self.horizontalScrollBar()
             v_bar = self.verticalScrollBar()
             h_bar.setValue(h_bar.value() - delta.x())
             v_bar.setValue(v_bar.value() - delta.y())
-
-            # 平移时重置防抖定时器
             self.render_timer.start()
             self.view_rect_changed.emit(self.get_visible_rect())
-        # 始终上报鼠标的 Scene 坐标（驱动 HUD 信息栏实时更新）
-        if self.slide_engine:
+
+        if self._current_path:
             scene_pos = self.mapToScene(event.position().toPoint())
             self.mouse_scene_pos_changed.emit(scene_pos.x(), scene_pos.y())
 
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
-        """重写鼠标释放：结束平移"""
         if event.button() == Qt.LeftButton:
             if self._is_roi_mode and self._roi_start_pos is not None:
                 if self._current_roi_item:
@@ -428,102 +383,72 @@ class WSIView(QGraphicsView):
             self._is_interaction = False
             self.interaction_finished.emit()
 
-    # ==================== 模块 C: 视口按需渲染核心逻辑 ====================
     def _render_high_res_viewport(self):
-        """
-        坐标映射与层级计算
-        """
-
-        # 提取重置方法
         def finish_interaction():
             if self._is_interaction:
                 self._is_interaction = False
                 self.interaction_finished.emit()
 
-        if not self.slide_engine:
+        if not self._current_path or not self._metadata:
             finish_interaction()
             return
 
-        # 1. 视图 -> Scene 坐标映射
-        # 获取当前 Viewport 在屏幕上的矩形
         viewport_rect = self.viewport().rect()
-        # 将屏幕矩形映射到 Scene 坐标系，获取可见区域
         visible_scene_rect = self.mapToScene(viewport_rect).boundingRect()
-
-        # 与 Scene 边界取交集，限制有效读取范围
         intersected_rect = visible_scene_rect.intersected(self.scene_canvas.sceneRect())
         if intersected_rect.isEmpty():
             finish_interaction()
             return
 
-        # 2. 动态层级 (Level) 计算
-        # 获取当前视图缩放比例
-        current_scale = self.transform().m11()
-        # 计算目标降采样率
-        target_downsample = 1.0 / current_scale
-
-        # 复用渲染请求逻辑
         self._request_high_res_render()
 
-    # ==================== 模块 D: 鹰眼图 ====================
-    def set_scale(self, target_scale: float):
-        """
-        设置绝对缩放比例（m11 值），以视口中心为锚点。
-        由 MagnificationWidget.zoom_to_scale 信号触发。
+    # ==================== View control ====================
 
-        :param target_scale: 目标 m11 值，范围 [1e-4, 1.0]
-        """
-        if not self.slide_engine:
+    def set_scale(self, target_scale: float):
+        """Set absolute zoom scale (m11 value), anchored to viewport centre."""
+        if not self._current_path:
             return
         current = self.transform().m11()
         if current <= 0:
             return
-
-        # 与 wheelEvent 保持一致：最大缩放至 Level-0 原始分辨率
         clamped = max(1e-4, min(float(target_scale), 1.0))
         factor = clamped / current
         if abs(factor - 1.0) < 1e-9:
             return
-
-        # 程序化跳转以视口中心为锚点，而非鼠标位置
         old_anchor = self.transformationAnchor()
         self.setTransformationAnchor(QGraphicsView.AnchorViewCenter)
         self.scale(factor, factor)
         self.setTransformationAnchor(old_anchor)
-
         self.zoom_changed.emit(self.transform().m11())
         self.render_timer.start()
         self.view_rect_changed.emit(self.get_visible_rect())
 
     def get_visible_rect(self):
-        """获取当前主视图处于 Level 0 坐标系下的可见矩形区域"""
         return self.mapToScene(self.viewport().rect()).boundingRect()
 
     def _trigger_view_update(self):
-        """在缩放和滚动后调用此方法发射信号"""
         self.view_rect_changed.emit(self.get_visible_rect())
 
     def zoom_in(self):
-        """以视口中心为锚点放大视图一档"""
-        if not self.slide_engine:
+        if not self._current_path:
             return
         self.set_scale(min(self.transform().m11() * 1.25, 1.0))
 
     def zoom_out(self):
-        """以视口中心为锚点缩小视图一档"""
-        if not self.slide_engine:
+        if not self._current_path:
             return
         self.set_scale(max(self.transform().m11() * 0.8, 1e-4))
 
     def reset_to_fit(self):
-        """将视图重置至适合窗口的初始缩放状态"""
-        if not self.slide_engine:
+        if not self._current_path or not self._metadata:
             return
-        w, h = self.slide_engine.level_0_dim
+        w, h = self._metadata.level_0_dim
         self.resetTransform()
         view_rect = self.viewport().rect()
-        initial_scale = min(view_rect.width() / w, view_rect.height() / h) * 0.95
+        scale_w = view_rect.width() / w
+        scale_h = view_rect.height() / h
+        initial_scale = min(scale_w, scale_h) * 0.95
         self.scale(initial_scale, initial_scale)
         self.zoom_changed.emit(self.transform().m11())
+        self.render_timer.start()
         self.view_rect_changed.emit(self.get_visible_rect())
-        self._render_high_res_viewport()

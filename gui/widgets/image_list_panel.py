@@ -72,6 +72,7 @@ class ImageListPanel(QDockWidget):
         self.list_widget.setIconSize(QSize(IMAGE_LIST_THUMB_W, IMAGE_LIST_THUMB_H))
         self.list_widget.setSpacing(2)
         self.list_widget.itemDoubleClicked.connect(self._on_item_double_clicked)
+        self.list_widget.currentItemChanged.connect(self._on_selection_changed)
         self.list_widget.setContextMenuPolicy(Qt.CustomContextMenu)
         self.list_widget.customContextMenuRequested.connect(self._on_context_menu)
         layout.addWidget(self.list_widget)
@@ -109,6 +110,7 @@ class ImageListPanel(QDockWidget):
     def add_images(self, paths: list):
         """批量添加多个 WSI 文件路径到列表（自动去重），统一触发一次缩略图加载。"""
         added = False
+        first_new = None  # 记录第一个真正新增的路径，用于预取
         for file_path in paths:
             abs_path = os.path.abspath(file_path)
             if abs_path in self._entries:
@@ -121,10 +123,19 @@ class ImageListPanel(QDockWidget):
             if not os.path.exists(abs_path):
                 item.setToolTip("文件不存在")
             self.list_widget.addItem(item)
+
+            if first_new is None:
+                first_new = abs_path
             added = True
 
         if added:
             self._restart_thumb_worker()
+            # 预热第一个新增切片，减少首次加载的 I/O 等待
+            if first_new and os.path.exists(first_new):
+                from PySide6.QtCore import QThreadPool
+                from workers.tile_scheduler import PreloadTask
+
+                QThreadPool.globalInstance().start(PreloadTask(first_new), -1)
 
     def highlight(self, file_path: str):
         """在列表中高亮显示指定路径对应的项。"""
@@ -134,6 +145,37 @@ class ImageListPanel(QDockWidget):
             if item.data(Qt.UserRole) == abs_path:
                 self.list_widget.setCurrentItem(item)
                 return
+
+    def preload_adjacent(self, file_path: str) -> None:
+        """预热列表中当前切片的前后相邻项（利用加载完成后的 I/O 空闲期）。"""
+        abs_path = os.path.abspath(file_path)
+        if abs_path not in self._entries:
+            return
+        idx = self._entries.index(abs_path)
+        candidates = []
+        if idx > 0:
+            candidates.append(self._entries[idx - 1])
+        if idx < len(self._entries) - 1:
+            candidates.append(self._entries[idx + 1])
+
+        from PySide6.QtCore import QThreadPool
+        from workers.tile_scheduler import PreloadTask
+
+        for path in candidates:
+            if os.path.exists(path):
+                QThreadPool.globalInstance().start(PreloadTask(path), -1)
+
+    def _on_selection_changed(self, current, previous):
+        """单击或键盘切换选中项时，后台预热引擎（消除首帧延迟）。"""
+        if current is None:
+            return
+        path = current.data(Qt.UserRole)
+        if path and os.path.exists(path):
+            from PySide6.QtCore import QThreadPool
+            from workers.tile_scheduler import PreloadTask
+
+            # 低优先级（-1）不与前台瓦片渲染竞争
+            QThreadPool.globalInstance().start(PreloadTask(path), -1)
 
     def _restart_thumb_worker(self):
         """取消旧 Worker，以所有未加载项重新启动缩略图加载。"""

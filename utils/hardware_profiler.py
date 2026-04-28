@@ -7,11 +7,6 @@ import config
 
 
 class HardwareProfiler:
-    """
-    硬件探针与性能基准测试模块。
-    负责探测计算设备、获取内存/显存信息、并基于启发式算法动态计算最优推理参数。
-    """
-
     @staticmethod
     def get_compute_device() -> str:
         """

@@ -2,6 +2,7 @@ import os
 
 from PySide6.QtWidgets import QFileDialog, QMessageBox
 
+from core.image_server import ImageServer
 from utils import DatabaseManager
 
 
@@ -28,7 +29,6 @@ class FileHandlingMixin:
 
     def _load_wsi_at_path(self, file_path):
         """执行切片加载的核心逻辑（立即显示缩略图，后台完成 I/O 测速与画像更新）。
-
         重入保护：若上一次加载尚未完成（例如因 processEvents 导致事件循环重入），
         则忽略本次调用，防止两个 load_wsi 并发执行引发 OpenSlide use-after-free 崩溃。
         """
@@ -43,7 +43,12 @@ class FileHandlingMixin:
 
     def _do_load_wsi_at_path(self, file_path):
         """_load_wsi_at_path 的实际执行体，由重入保护包装后调用。"""
-        # 切换切片前，清空 AI 预测框与热力图
+        self._pre_switch_cleanup()
+        self._activate_slide(file_path)
+        self._post_switch_tasks(file_path)
+
+    def _pre_switch_cleanup(self):
+        """清空旧切片的 AI 结果、热力图和画廊（在 load_wsi 之前执行）。"""
         for item in self.ai_layer_group.childItems():
             self.ai_layer_group.removeFromGroup(item)
             self.viewer.scene_canvas.removeItem(item)
@@ -52,23 +57,27 @@ class FileHandlingMixin:
             self._clear_heatmap()
         if hasattr(self, "btn_export"):
             self.btn_export.setEnabled(False)
-
         if hasattr(self, "gallery"):
             self.gallery.clear_gallery()
 
+    def _activate_slide(self, file_path):
+        """加载切片数据并更新所有视图组件：viewer、minimap、状态栏。"""
         self.current_wsi_path = file_path
         self.viewer.load_wsi(file_path)
         self.statusBar().showMessage(f"正在加载: {os.path.basename(file_path)}...")
 
-        # 注意：此处已移除 QApplication.processEvents()。
-        # processEvents() 会允许事件循环在加载过程中处理鼠标点击，
-        # 导致 _load_wsi_at_path 被重入调用，引发 OpenSlide use-after-free 崩溃。
-        # 底图缩略图由 viewer.load_wsi() 内部同步绘制，无需强制刷新。
+        if self.viewer._metadata is not None:
+            thumb_img, downsample = ImageServer.instance().get_thumbnail(
+                file_path, level_from_last=1
+            )
+            self.minimap.load_minimap(thumb_img, downsample)
 
-        if hasattr(self.viewer, "slide_engine") and self.viewer.slide_engine:
-            self.minimap.load_minimap(self.viewer.slide_engine)
+        # 在图像列表中高亮当前已加载的项
+        if hasattr(self, "image_list_panel"):
+            self.image_list_panel.highlight(file_path)
 
-        # 本地数据库缓存读取（快速查询，保留在主线程）
+    def _post_switch_tasks(self, file_path):
+        """数据库缓存查询（含阻塞弹窗）+ 后台 I/O 测速启动。"""
         db = DatabaseManager()
         cache_data = db.get_analysis(file_path)
         if cache_data and cache_data.get("status") == "completed":
@@ -85,15 +94,9 @@ class FileHandlingMixin:
                     f"已从本地数据库加载 {len(results)} 个病灶。"
                 )
 
-        # 在图像列表中高亮当前已加载的项
-        if hasattr(self, "image_list_panel"):
-            self.image_list_panel.highlight(file_path)
-
-        # 后台 I/O 测速与硬件画像更新（耗时操作，不阻塞主线程）
         drive_prefix = os.path.splitdrive(os.path.abspath(file_path))[0]
         existing_profile = db.get_system_profile(drive_prefix)
 
-        # 取消并替换旧的测速 Worker（断开信号防止旧结果污染当前状态）
         if hasattr(self, "_profile_worker") and self._profile_worker.isRunning():
             try:
                 self._profile_worker.profile_ready.disconnect()

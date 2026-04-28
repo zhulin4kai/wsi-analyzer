@@ -1,14 +1,3 @@
-"""
-工具栏放大倍率控件（QuPath 风格）
-
-- 正常模式：只读标签，显示当前等效放大倍率，如 "15.60 ×"
-- 双击进入编辑模式：QLineEdit 允许输入目标倍率
-- Enter / 失焦 → 解析、校验、发射跳转信号
-- Esc  → 取消，恢复原显示
-- 最大倍率由 config.HUD_MAG_MAX 限制（默认 40×）
-- 无 WSI 物镜元数据时，以 config.HUD_MAG_DEFAULT_OBJECTIVE 作为默认值
-"""
-
 from PySide6.QtCore import QEvent, Qt, Signal
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QLineEdit, QWidget
 
@@ -21,21 +10,6 @@ from config import (
 
 
 class MagnificationWidget(QWidget):
-    """
-    工具栏放大倍率显示 / 输入控件。
-
-    使用方式::
-
-        widget = MagnificationWidget(toolbar)
-        widget.load(objective_power)                       # 切片加载后注入物镜倍率
-        viewer.zoom_changed.connect(widget.on_zoom_changed)
-        widget.zoom_to_scale.connect(viewer.set_scale)
-
-    信号
-    ----
-    zoom_to_scale(float)
-        用户确认输入后发射，携带换算后的目标 m11 scale 值。
-    """
 
     zoom_to_scale = Signal(float)
 
@@ -74,11 +48,6 @@ class MagnificationWidget(QWidget):
     # ── 公共 API ─────────────────────────────────────────────────────────
 
     def load(self, objective_power):
-        """
-        切片加载完成时由主窗口调用，注入物镜倍率元数据。
-
-        :param objective_power: 物镜倍率（如 40.0），无元数据时传 None
-        """
         self._objective_power = objective_power
         self._refresh_label()
 
@@ -90,11 +59,6 @@ class MagnificationWidget(QWidget):
         self._exit_edit_mode(apply=False)
 
     def on_zoom_changed(self, scale: float):
-        """
-        连接 ``WSIView.zoom_changed`` 信号的槽函数。
-
-        :param scale: 当前 m11 值（即 screen_px / level0_px）
-        """
         self._current_scale = scale
         if not self._editing:
             self._refresh_label()
@@ -159,11 +123,6 @@ class MagnificationWidget(QWidget):
         self._exit_edit_mode(apply=True)
 
     def _exit_edit_mode(self, apply: bool = True):
-        """
-        退出编辑模式，恢复只读标签。
-
-        :param apply: True 时刷新标签（正常退出）；False 时仅切换控件可见性（重置）。
-        """
         if not self._editing and apply:
             return
         self._editing = False  # 必须先置 False，防止 FocusOut 二次触发

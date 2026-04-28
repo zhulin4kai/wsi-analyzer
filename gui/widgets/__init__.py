@@ -5,5 +5,4 @@ from .magnification_widget import MagnificationWidget
 from .minimap_view import MinimapView
 from .report_exporter import ReportExporter
 from .scale_bar_overlay import ScaleBarOverlay
-from .tile_cache import TileLRUCache
 from .wsi_view import WSIView

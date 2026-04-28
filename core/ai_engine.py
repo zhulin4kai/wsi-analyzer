@@ -7,7 +7,7 @@ import numpy as np
 from tqdm import tqdm
 
 import config
-from core import WSIDataEngine
+from core.image_server import ImageServer
 from core.model_adapters import ModelAdapterFactory
 from core.roi_manager import ROIManager
 from utils import logger
@@ -99,9 +99,9 @@ class WSIAnalyzer:
             model_path, model_type=model_type, patch_size=self.patch_size
         )
 
-        # 加载 WSI 图像（后台线程独立句柄）
+        # 通过 SlidePool 借用引擎；分析期间引用计数保持 >= 1，池不会驱逐该引擎
         logger.info(f"[*] 正在打开 WSI 文件: {svs_path}")
-        self.slide_engine = WSIDataEngine(svs_path)
+        self.slide_engine = ImageServer.instance().acquire_engine(svs_path)
         self.level_0_dim = self.slide_engine.level_0_dim
 
     def cancel(self):
@@ -400,6 +400,7 @@ class WSIAnalyzer:
         }
 
     def close(self):
-        """释放 OpenSlide 句柄"""
+        """释放引擎引用，引用计数归零后 SlidePool 可按 LRU 策略回收。"""
         if hasattr(self, "slide_engine") and self.slide_engine is not None:
-            self.slide_engine.close()
+            ImageServer.instance().release_engine(self.svs_path)
+            self.slide_engine = None

@@ -58,19 +58,14 @@ class MinimapView(QGraphicsView):
 
         self.downsample_factor = 1.0  # Level 0 到缩略图的缩放系数
 
-    def load_minimap(self, slide_engine):
-        """加载缩略图并计算映射系数"""
-        thumb_img, self.downsample_factor = slide_engine.get_thumbnail(
-            level_from_last=1
-        )
-
+    def load_minimap(self, thumb_img, downsample_factor: float):
+        """将缩略图加载到鹰眼图。thumb_img 为 PIL.Image，downsample_factor 为 Level-0 到缩略图的降采样系数。"""
+        self.downsample_factor = downsample_factor
         self.bg_item.setPixmap(QPixmap.fromImage(ImageQt(thumb_img)))
 
-        # 切换切片时清空旧热力图，避免上一张切片的热力图残留显示
         self.heatmap_mini_item.setPixmap(QPixmap())
 
-        # 根据切片比例计算缩略图尺寸
-        max_size = 250.0  # 以250像素为最大边长基准
+        max_size = 250.0
         img_w, img_h = thumb_img.width, thumb_img.height
 
         if img_w > img_h:
@@ -82,11 +77,9 @@ class MinimapView(QGraphicsView):
 
         self.setFixedSize(target_w, target_h)
 
-        # 约束 Scene 大小并自动适配 View 视口
         self.scene_canvas.setSceneRect(0, 0, img_w, img_h)
         self.fitInView(self.scene_canvas.sceneRect(), Qt.KeepAspectRatio)
 
-        # 显示鹰眼图
         self.setVisible(True)
 
     def resizeEvent(self, event):

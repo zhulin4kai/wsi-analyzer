@@ -1,128 +1,63 @@
-from PIL.ImageQt import ImageQt
-from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal
+from PySide6.QtCore import QObject, Signal
 from PySide6.QtGui import QImage
 
-from utils.logger import logger
-
-
-class RenderWorkerSignals(QObject):
-    """用于 QRunnable 发射信号的辅助类"""
-
-    # 信号：传递 版本号, level, col, row, 图像数据, X坐标, Y坐标, 放大比例
-    image_ready = Signal(int, int, int, int, QImage, int, int, float)
-
-
-class TileRenderTask(QRunnable):
-    """
-    独立的瓦片渲染任务。
-    放入 QThreadPool 并发执行。
-    """
-
-    def __init__(
-        self,
-        slide_engine,
-        level,
-        col,
-        row,
-        x,
-        y,
-        w,
-        h,
-        scale,
-        version,
-        active_version_func,
-    ):
-        super().__init__()
-        self.slide_engine = slide_engine
-        self.level = level
-        self.col = col
-        self.row = row
-        self.x = x
-        self.y = y
-        self.w = w
-        self.h = h
-        self.scale = scale
-        self.version = version
-        self.active_version_func = active_version_func
-        self.signals = RenderWorkerSignals()
-
-    def run(self):
-        # 检查任务是否过期
-        if self.version < self.active_version_func():
-            return
-
-        try:
-            # 1. 读取图像区域
-            pil_img = self.slide_engine.read_region(
-                (self.x, self.y), self.level, (self.w, self.h)
-            )
-
-            # 读取后再次检查任务是否过期
-            if self.version < self.active_version_func():
-                return
-
-            # 2. 像素格式转换
-            # 使用 .copy() 解除与 PIL 的内存绑定，避免跨线程异常
-            qimg = ImageQt(pil_img).copy()
-
-            # 3. 发送图像数据信号
-            self.signals.image_ready.emit(
-                self.version,
-                self.level,
-                self.col,
-                self.row,
-                qimg,
-                self.x,
-                self.y,
-                self.scale,
-            )
-        except Exception as e:
-            logger.exception(f"TileRenderTask 发生异常: {e}")
+from workers.tile_scheduler import PriorityTileScheduler, TileSchedulerSignals
 
 
 class RenderWorker(QObject):
-    """
-    并发渲染管理器。
-    负责接收渲染请求并将其分发给 QThreadPool。
+    """基于 PriorityTileScheduler 的并发瓦片渲染协调器。
+
+    作为调度器的薄适配层：对外保持与原有 ``image_ready`` 信号相同的接口，
+    内部将所有任务分发委托给 ``PriorityTileScheduler``。
     """
 
-    # 信号：传递 版本号, level, col, row, 图像数据, X坐标, Y坐标, 放大比例
-    image_ready = Signal(int, int, int, int, QImage, int, int, float)
+    image_ready = Signal(str, int, int, int, int, QImage, int, int, float)
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.thread_pool = QThreadPool.globalInstance()
-        self.active_version = 0
+        # TileSchedulerSignals 必须在主线程创建
+        self._signals = TileSchedulerSignals()
+        self._signals.image_ready.connect(self.image_ready)
+        self._scheduler = PriorityTileScheduler(self._signals, num_workers=4)
 
-    def start(self):
-        """兼容旧接口"""
+    def start(self) -> None:
+        """空操作：调度器线程已在 __init__ 中启动。"""
         pass
 
-    def stop(self):
-        """清理未执行的任务"""
-        self.thread_pool.clear()
+    def stop(self) -> None:
+        """清空队列中所有待处理任务（正在执行的任务不受影响）。"""
+        self._scheduler.cancel_all()
 
-    def get_active_version(self):
-        return self.active_version
+    def shutdown(self) -> None:
+        """停止所有调度器工作线程，在应用退出时调用一次。"""
+        self._scheduler.shutdown()
 
-    def request_render(self, slide_engine, level, col, row, x, y, w, h, scale, version):
-        """提交渲染请求"""
-        self.active_version = max(self.active_version, version)
+    def get_active_version(self) -> int:
+        return self._scheduler.get_active_version()
 
-        task = TileRenderTask(
-            slide_engine,
-            level,
-            col,
-            row,
-            x,
-            y,
-            w,
-            h,
-            scale,
-            version,
-            self.get_active_version,
+    def set_version(self, version: int) -> None:
+        """推进活跃渲染版本号，使旧版本任务被跳过。"""
+        self._scheduler.set_version(version)
+
+    # ------------------------------------------------------------------
+    # 任务提交
+    # ------------------------------------------------------------------
+
+    def request_render(
+        self,
+        path: str,
+        level: int,
+        col: int,
+        row: int,
+        x: int,
+        y: int,
+        w: int,
+        h: int,
+        scale: float,
+        version: int,
+        priority: float = 0.0,
+    ) -> None:
+        self._scheduler.set_version(version)
+        self._scheduler.submit(
+            priority, path, level, col, row, x, y, w, h, scale, version
         )
-        task.signals.image_ready.connect(self.image_ready)
-
-        # 将任务提交到线程池
-        self.thread_pool.start(task)

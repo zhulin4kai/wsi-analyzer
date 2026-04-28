@@ -1,10 +1,3 @@
-"""
-比例尺叠加层（左下角）
-显示：物理比例尺图形与单位标签（如 "800 μm"）
-连接 WSIView.zoom_changed 信号后自动刷新。
-放大倍率已移至工具栏 MagnificationWidget，本控件不再承担该职责。
-"""
-
 import math
 
 from PySide6.QtCore import Qt

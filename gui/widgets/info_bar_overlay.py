@@ -1,10 +1,3 @@
-"""
-坐标与色彩信息叠加层（右下角）
-显示：鼠标所在位置的 Level-0 物理坐标（μm）+ 像素 RGB 色彩
-连接 WSIView.mouse_scene_pos_changed 信号后自动刷新。
-RGB 读取使用 OpenSlide 精确采样，并附加 150ms 防抖避免 I/O 过载。
-"""
-
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QBrush, QColor, QFont, QPainter, QPen
 from PySide6.QtWidgets import QWidget
@@ -28,15 +21,6 @@ _RGB_DEBOUNCE_MS = HUD_INFO_RGB_DEBOUNCE_MS
 
 
 class InfoBarOverlay(QWidget):
-    """
-    右下角坐标/色彩 HUD 叠加层。
-
-    使用方式：
-        overlay = InfoBarOverlay(viewer_widget)
-        overlay.load(slide_engine, mpp_x, mpp_y)
-        viewer.mouse_scene_pos_changed.connect(overlay.on_mouse_moved)
-    """
-
     WIDGET_W = 240
     WIDGET_H = 52
 
@@ -48,7 +32,8 @@ class InfoBarOverlay(QWidget):
 
         self._mpp_x = None  # 水平微米/像素
         self._mpp_y = None  # 垂直微米/像素
-        self._slide_engine = None  # WSIDataEngine 实例，用于精确 RGB 采样
+        self._path = None  # 当前切片路径，用于 ImageServer.sample_pixel() 采样
+        self._level_0_dim = (0, 0)  # Level-0 dimensions for bounds checking
 
         self._coord_text = ""  # 坐标文字
         self._rgb_text = ""  # RGB 文字，如 "R 187  G 110  B 184"
@@ -69,18 +54,13 @@ class InfoBarOverlay(QWidget):
 
     # ── 公共 API ─────────────────────────────────────────────────────────
 
-    def load(self, slide_engine, mpp_x, mpp_y):
-        """
-        加载新切片时由主窗口调用，重置状态并绑定数据引擎。
-
-        :param slide_engine: WSIDataEngine 实例
-        :param mpp_x: 水平方向微米/像素，无元数据时传 None
-        :param mpp_y: 垂直方向微米/像素，无元数据时传 None
-        """
-        self._slide_engine = slide_engine
-        self._mpp_x = mpp_x
-        self._mpp_y = mpp_y
-        # 切换切片时清空旧数据
+    def load(self, metadata):
+        """将叠加层绑定到新的切片，metadata 为 SlideMetadata 实例。"""
+        self._path = metadata.path
+        self._level_0_dim = metadata.level_0_dim
+        mpp = metadata.mpp
+        self._mpp_x = mpp[0] if mpp else None
+        self._mpp_y = mpp[1] if mpp else None
         self._coord_text = ""
         self._rgb_text = ""
         self._rgb_color = QColor(0, 0, 0, 0)
@@ -110,13 +90,15 @@ class InfoBarOverlay(QWidget):
 
     def _sample_rgb(self):
         """防抖后由 QTimer 触发，精确读取 Level-0 像素色彩。"""
-        if not self._slide_engine:
+        if not self._path:
             return
         try:
-            w, h = self._slide_engine.level_0_dim
+            from core.image_server import ImageServer
+
+            w, h = self._level_0_dim
             lx, ly = self._pending_lx, self._pending_ly
             if 0 <= lx < w and 0 <= ly < h:
-                patch = self._slide_engine.read_region((lx, ly), 0, (1, 1))
+                patch = ImageServer.instance().sample_pixel(self._path, lx, ly)
                 r, g, b = patch.convert("RGB").getpixel((0, 0))
                 self._rgb_text = f"R {r:3d}  G {g:3d}  B {b:3d}"
                 self._rgb_color = QColor(r, g, b)
@@ -134,7 +116,7 @@ class InfoBarOverlay(QWidget):
         p.setRenderHint(QPainter.Antialiasing)
         p.setRenderHint(QPainter.TextAntialiasing)
 
-        w, h = self.width(), self.height()
+        w = self.width()
         pad = _PADDING
         swatch = _SWATCH_SIZE
 
