@@ -5,15 +5,17 @@ from gui.mixins.heatmap_mixin import HeatmapMixin
 
 
 class AnalysisMixin(
-    AnalysisToolbarMixin, DetectionLayerMixin, AnalysisRunnerMixin, HeatmapMixin
+    AnalysisRunnerMixin, AnalysisToolbarMixin, DetectionLayerMixin, HeatmapMixin
 ):
-    """AI 分析功能组合器，聚合工具栏、渲染、分析执行与热力图四个子模块。
+    """聚合所有 AI 分析相关 Mixin 的组合类。
 
-    主窗口只需继承此类，无需感知内部子模块的划分。
+    继承关系：
+        AnalysisRunnerMixin  —— AIAnalysisWorker 线程启动、进度对话框、取消/错误处理
+        AnalysisToolbarMixin —— 顶部工具栏构建、模型选择、智能调优
+        DetectionLayerMixin  —— 预测框绘制、结果持久化、图层可见性控制
+        HeatmapMixin         —— 热力图生成、LOD 动态渲染、小地图同步
 
-    MRO 解析顺序：AnalysisToolbarMixin → DetectionLayerMixin → AnalysisRunnerMixin → HeatmapMixin
-    - AnalysisToolbarMixin : 工具栏构建、模型选择与自动调优
-    - DetectionLayerMixin  : AI 预测框绘制、LOD 控制与图层可见性
-    - AnalysisRunnerMixin  : Worker 线程启动、ROI 分析、取消与错误处理
-    - HeatmapMixin         : 检测结果空间密度热力图计算、渲染与生命周期管理
+    供 MainWindow 单点继承，避免主窗口直接依赖各子 Mixin 的内部实现细节。
     """
+
+    pass

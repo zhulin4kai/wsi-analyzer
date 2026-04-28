@@ -4,8 +4,6 @@ import os
 
 import cv2
 import numpy as np
-import torch
-import torchvision
 from tqdm import tqdm
 
 import config
@@ -15,6 +13,7 @@ from core.roi_manager import ROIManager
 from utils import logger
 from utils.db_manager import DatabaseManager
 from utils.hardware_profiler import HardwareProfiler
+from utils.nms import nms_numpy
 
 
 class WSIAnalyzer:
@@ -199,12 +198,7 @@ class WSIAnalyzer:
                     or "oom" in str(e).lower()
                     or "memory" in str(e).lower()
                 ):
-                    logger.warning(
-                        "发生显存溢出 (OOM)，正在清空缓存并缩减 Batch Size 进行重试"
-                    )
-                    if torch.cuda.is_available():
-                        torch.cuda.empty_cache()
-
+                    logger.warning("发生显存溢出 (OOM)，正在缩减 Batch Size 进行重试")
                     self.batch_size = max(1, self.batch_size // 2)
                     # 回退指针，重新处理当前批次
                     i -= len(batch_coords)
@@ -241,22 +235,21 @@ class WSIAnalyzer:
     def _apply_global_nms(self, global_boxes, global_scores, global_classes):
         if len(global_boxes) == 0:
             return []
-        boxes_tensor = torch.tensor(global_boxes, dtype=torch.float32)
-        scores_tensor = torch.tensor(global_scores, dtype=torch.float32)
-        keep_indices = torchvision.ops.nms(
-            boxes_tensor, scores_tensor, iou_threshold=self.nms_iou_thresh
-        )
 
-        final_results = []
-        for idx in keep_indices.cpu().numpy():
-            final_results.append(
-                {
-                    "bbox": [round(float(b), 2) for b in global_boxes[idx]],
-                    "confidence": round(float(global_scores[idx]), 4),
-                    "class_id": int(global_classes[idx]),
-                }
-            )
-        return final_results
+        boxes_arr = np.array(global_boxes, dtype=np.float32)
+        scores_arr = np.array(global_scores, dtype=np.float32)
+        classes_arr = np.array(global_classes)
+
+        keep_indices = nms_numpy(boxes_arr, scores_arr, self.nms_iou_thresh)
+
+        return [
+            {
+                "bbox": [round(float(b), 2) for b in boxes_arr[idx]],
+                "confidence": round(float(scores_arr[idx]), 4),
+                "class_id": int(classes_arr[idx]),
+            }
+            for idx in keep_indices
+        ]
 
     def process(
         self,
@@ -407,9 +400,6 @@ class WSIAnalyzer:
         }
 
     def close(self):
-        """释放 OpenSlide 句柄和 GPU 显存"""
+        """释放 OpenSlide 句柄"""
         if hasattr(self, "slide_engine") and self.slide_engine is not None:
             self.slide_engine.close()
-
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()

@@ -1,35 +1,42 @@
+import subprocess
 import time
 
 import psutil
-import torch
 
 import config
 
 
 class HardwareProfiler:
     """
-    硬件探针与性能基准测试模块
+    硬件探针与性能基准测试模块。
     负责探测计算设备、获取内存/显存信息、并基于启发式算法动态计算最优推理参数。
     """
 
     @staticmethod
     def get_compute_device() -> str:
         """
-        静态硬件侦测：识别计算引擎
+        检测可用的计算设备。
         返回优先顺序：cuda -> mps -> cpu
         """
-        if torch is None:
-            return "cpu"
-        if torch.cuda.is_available():
-            return "cuda"
-        if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-            return "mps"
+        try:
+            import onnxruntime as ort
+
+            providers = ort.get_available_providers()
+            if "CUDAExecutionProvider" in providers:
+                return "cuda"
+            if (
+                "CoreMLExecutionProvider" in providers
+                or "MPSExecutionProvider" in providers
+            ):
+                return "mps"
+        except Exception:
+            pass
         return "cpu"
 
     @staticmethod
     def get_system_ram_info() -> tuple:
         """
-        获取系统物理总内存和当前可用内存
+        获取系统物理总内存和当前可用内存。
         :return: (total_ram_mb, available_ram_mb)
         """
         vm = psutil.virtual_memory()
@@ -40,23 +47,52 @@ class HardwareProfiler:
     @staticmethod
     def get_vram_info(device: str) -> tuple:
         """
-        显存探针：获取GPU的总显存和空闲显存
-        :param device: "cuda", "mps", 或 "cpu"
+        获取 GPU 的总显存和空闲显存。
+        :param device: "cuda"、"mps" 或 "cpu"
         :return: (total_vram_mb, free_vram_mb)
         """
-        if device == "cuda" and torch is not None:
-            # 返回当前设备的显存信息：(free, total) 字节
-            free_bytes, total_bytes = torch.cuda.mem_get_info()
-            return total_bytes / (1024 * 1024), free_bytes / (1024 * 1024)
+        if device == "cuda":
+            # 优先通过 pynvml 精确读取
+            try:
+                import pynvml
+
+                pynvml.nvmlInit()
+                handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+                info = pynvml.nvmlMemoryInfo(handle)
+                total_mb = info.total / (1024 * 1024)
+                free_mb = info.free / (1024 * 1024)
+                pynvml.nvmlShutdown()
+                return total_mb, free_mb
+            except Exception:
+                pass
+
+            # 次选通过 nvidia-smi 命令行读取
+            try:
+                result = subprocess.run(
+                    [
+                        "nvidia-smi",
+                        "--query-gpu=memory.total,memory.free",
+                        "--format=csv,noheader,nounits",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                )
+                if result.returncode == 0:
+                    parts = result.stdout.strip().split("\n")[0].split(",")
+                    return float(parts[0].strip()), float(parts[1].strip())
+            except Exception:
+                pass
+
+            # 两种方式均失败时返回 (0, 0)，由调用方退化为最小 batch_size
+            return 0.0, 0.0
 
         elif device == "mps":
-            # Apple Silicon 使用统一内存架构，显存即系统内存
+            # Apple Silicon 统一内存架构，以系统可用内存的 70% 作为可用显存估算值
             total_ram_mb, available_ram_mb = HardwareProfiler.get_system_ram_info()
-            # 出于安全考虑，认为系统可用内存的 70% 可用作显存
             return total_ram_mb, available_ram_mb * 0.7
 
         else:
-            # CPU 推理，返回系统内存作为虚拟显存参考
             return HardwareProfiler.get_system_ram_info()
 
     @staticmethod
@@ -70,8 +106,6 @@ class HardwareProfiler:
         """
         try:
             start_time = time.perf_counter()
-            # engine_init_func 需执行加载切片并获取第一张宏观缩略图的操作
-            # 并返回所读取数据的估算字节数
             thumbnail_bytes = engine_init_func(file_path)
             end_time = time.perf_counter()
 
@@ -83,7 +117,6 @@ class HardwareProfiler:
             return io_speed_mbps
 
         except Exception as _e:
-            # 如果测速失败，返回安全默认值 (20.0 MB/s)
             return 20
 
     @staticmethod
@@ -104,22 +137,18 @@ class HardwareProfiler:
             total_ram, _ = HardwareProfiler.get_system_ram_info()
 
         # 1. 计算理论显存上限
-        # 安全冗余预留: 避免显存碎片或突发占用
         safety_margin = config.SAFE_VRAM_MARGIN_MB
-        # 模型预估开销 (根据模型体积估算显存占用)
         model_overhead = model_size * config.MODEL_VRAM_OVERHEAD_MULTIPLIER
-        # 单个瓦片的显存预估占用
         vram_per_tile = config.VRAM_PER_TILE_MB
 
         usable_vram = free_vram - model_overhead - safety_margin
 
         if usable_vram <= 0:
-            theoretical_batch_size = 1  # 显存不足时，采用最小值 1
+            theoretical_batch_size = 1
         else:
             theoretical_batch_size = int(usable_vram / vram_per_tile)
 
         # 2. I/O 瓶颈截断机制
-        # 防止 GPU 过快处理完数据陷入长时间等待引发卡顿
         io_capped_batch_size = theoretical_batch_size
         if io_speed < config.IO_SPEED_NAS_USB2_MBPS:
             io_capped_batch_size = min(
@@ -134,22 +163,19 @@ class HardwareProfiler:
                 theoretical_batch_size, config.BATCH_SIZE_CAP_NORMAL_SSD
             )
         else:
-            # NVMe 固态级别的高速盘
             io_capped_batch_size = min(
                 theoretical_batch_size, config.BATCH_SIZE_CAP_NVME_SSD
             )
 
-        # 保证 batch_size 最少为 1
         final_batch_size = max(1, io_capped_batch_size)
 
         # 3. 缓存自适应降级
-        # 如果物理内存小于 8GB (约 8000 MB)，降低 TileLRUCache 的瓦片缓存上限
         if total_ram < config.RAM_THRESHOLD_SMALL_MB:
-            tile_cache_limit = config.TILE_CACHE_LIMIT_SMALL  # 小内存保守设置
+            tile_cache_limit = config.TILE_CACHE_LIMIT_SMALL
         elif total_ram < config.RAM_THRESHOLD_NORMAL_MB:
-            tile_cache_limit = config.TILE_CACHE_LIMIT_NORMAL  # 正常内存设置
+            tile_cache_limit = config.TILE_CACHE_LIMIT_NORMAL
         else:
-            tile_cache_limit = config.TILE_CACHE_LIMIT_LARGE  # 充足内存时激进缓存
+            tile_cache_limit = config.TILE_CACHE_LIMIT_LARGE
 
         return {
             "batch_size": final_batch_size,
@@ -163,7 +189,6 @@ class HardwareProfiler:
         io_speed: float, patch_size: int, model_size: float
     ) -> dict:
         """根据综合测速，计算滑动步长重叠率与置信度"""
-        # 步长自适应
         if io_speed < config.IO_SPEED_SATA_SSD_MBPS:
             stride = int(patch_size * config.AUTO_STRIDE_RATIO_LOW)
         elif io_speed < config.IO_SPEED_NORMAL_SSD_MBPS:
@@ -171,7 +196,6 @@ class HardwareProfiler:
         else:
             stride = int(patch_size * config.AUTO_STRIDE_RATIO_HIGH)
 
-        # 置信度自适应 (大于 100MB 视为大模型)
         if model_size > 100.0:
             conf_thresh = 0.5
         else:

@@ -115,6 +115,11 @@ class AnalysisToolbarMixin:
                 self.statusBar().showMessage(
                     f"智能调优: 已根据 YOLO 模型设置 Patch Size = {imgsz}"
                 )
+        except ImportError:
+            self.statusBar().showMessage(
+                "提示: 当前环境未安装 ultralytics，无法从 .pt 文件读取模型参数。"
+                "建议使用 export_onnx.py 将模型转换为 .onnx 格式后重新选择。"
+            )
         except Exception:
             pass
 

@@ -1,8 +1,8 @@
-import torch
-import torchvision
+import numpy as np
 
 import config
 from utils import logger
+from utils.nms import nms_numpy
 
 
 class ROIManager:
@@ -98,22 +98,9 @@ class ROIManager:
         if not combined_results:
             return []
 
-        boxes = []
-        scores = []
+        boxes = np.array([r["bbox"] for r in combined_results], dtype=np.float32)
+        scores = np.array([r["confidence"] for r in combined_results], dtype=np.float32)
 
-        for res in combined_results:
-            boxes.append(res["bbox"])
-            scores.append(res["confidence"])
+        keep_indices = nms_numpy(boxes, scores, nms_iou_thresh)
 
-        boxes_tensor = torch.tensor(boxes, dtype=torch.float32)
-        scores_tensor = torch.tensor(scores, dtype=torch.float32)
-
-        keep_indices = torchvision.ops.nms(
-            boxes_tensor, scores_tensor, iou_threshold=nms_iou_thresh
-        )
-
-        fused_results = []
-        for idx in keep_indices.cpu().numpy():
-            fused_results.append(combined_results[idx])
-
-        return fused_results
+        return [combined_results[idx] for idx in keep_indices]

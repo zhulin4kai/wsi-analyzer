@@ -1,13 +1,21 @@
 import logging
 import os
 import sys
-import traceback
 from logging.handlers import RotatingFileHandler
+
+
+def _get_log_dir() -> str:
+    """返回日志目录的绝对路径。打包后指向 exe 同级目录，开发时指向项目根目录。"""
+    if getattr(sys, "frozen", False):
+        base = os.path.dirname(sys.executable)
+    else:
+        base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(base, "logs")
 
 
 def setup_logger():
     """初始化并配置全局日志系统"""
-    log_dir = "logs"
+    log_dir = _get_log_dir()
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
 

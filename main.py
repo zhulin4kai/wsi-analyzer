@@ -2,6 +2,19 @@ import multiprocessing
 import os
 import sys
 
+# 在 console=False 的 PyInstaller EXE 中，sys.stdout / sys.stderr 为 None。
+# multiprocessing 的 bootstrap 代码会向它们写入异常信息，导致次生的
+# AttributeError: 'NoneType' object has no attribute 'write'。
+# 用一个静默的 /dev/null 替代，让真正的根因错误信息通过日志而非控制台输出。
+if sys.stdout is None:
+    import io
+
+    sys.stdout = io.StringIO()
+if sys.stderr is None:
+    import io
+
+    sys.stderr = io.StringIO()
+
 from core.launcher import AppLauncher
 
 
