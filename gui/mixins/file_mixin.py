@@ -1,6 +1,6 @@
 import os
 
-from PySide6.QtWidgets import QApplication, QFileDialog, QMessageBox
+from PySide6.QtWidgets import QFileDialog, QMessageBox
 
 from utils import DatabaseManager
 
@@ -27,7 +27,22 @@ class FileHandlingMixin:
             self.image_list_panel.add_images(paths)
 
     def _load_wsi_at_path(self, file_path):
-        """执行切片加载的核心逻辑（立即显示缩略图，后台完成 I/O 测速与画像更新）。"""
+        """执行切片加载的核心逻辑（立即显示缩略图，后台完成 I/O 测速与画像更新）。
+
+        重入保护：若上一次加载尚未完成（例如因 processEvents 导致事件循环重入），
+        则忽略本次调用，防止两个 load_wsi 并发执行引发 OpenSlide use-after-free 崩溃。
+        """
+        if getattr(self, "_is_loading_wsi", False):
+            return
+        self._is_loading_wsi = True
+
+        try:
+            self._do_load_wsi_at_path(file_path)
+        finally:
+            self._is_loading_wsi = False
+
+    def _do_load_wsi_at_path(self, file_path):
+        """_load_wsi_at_path 的实际执行体，由重入保护包装后调用。"""
         # 切换切片前，清空 AI 预测框与热力图
         for item in self.ai_layer_group.childItems():
             self.ai_layer_group.removeFromGroup(item)
@@ -45,8 +60,10 @@ class FileHandlingMixin:
         self.viewer.load_wsi(file_path)
         self.statusBar().showMessage(f"正在加载: {os.path.basename(file_path)}...")
 
-        # 强制立即刷新，使低分辨率缩略图第一时间上屏
-        QApplication.processEvents()
+        # 注意：此处已移除 QApplication.processEvents()。
+        # processEvents() 会允许事件循环在加载过程中处理鼠标点击，
+        # 导致 _load_wsi_at_path 被重入调用，引发 OpenSlide use-after-free 崩溃。
+        # 底图缩略图由 viewer.load_wsi() 内部同步绘制，无需强制刷新。
 
         if hasattr(self.viewer, "slide_engine") and self.viewer.slide_engine:
             self.minimap.load_minimap(self.viewer.slide_engine)

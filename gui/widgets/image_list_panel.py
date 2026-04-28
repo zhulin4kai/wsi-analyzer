@@ -1,6 +1,6 @@
 import os
 
-from PySide6.QtCore import QSize, Qt, Signal
+from PySide6.QtCore import QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtWidgets import (
     QDockWidget,
@@ -48,6 +48,13 @@ class ImageListPanel(QDockWidget):
         self._thumb_worker = None
         # 已取消但仍在运行的旧 Worker 引用，防止 QThread 被 GC 回收导致崩溃
         self._dead_workers = []
+
+        # 防抖：快速连续双击时只响应最后一次，避免多次调用 load_wsi 导致竞态崩溃
+        self._pending_load_path = None
+        self._load_debounce_timer = QTimer(self)
+        self._load_debounce_timer.setSingleShot(True)
+        self._load_debounce_timer.setInterval(250)  # 250ms 内的重复点击只取最后一次
+        self._load_debounce_timer.timeout.connect(self._fire_load_request)
 
         # --- 布局 ---
         container = QWidget()
@@ -163,12 +170,24 @@ class ImageListPanel(QDockWidget):
                 item.setIcon(QIcon(QPixmap.fromImage(qimg)))
 
     def _on_item_double_clicked(self, item: QListWidgetItem):
-        """双击时校验文件存在性后发射加载请求。"""
+        """双击时校验文件存在性后，通过防抖定时器延迟发射加载请求。
+
+        快速连续切换切片时，250ms 内的多次点击只有最后一次生效，
+        防止多个 load_wsi 调用并发执行导致 OpenSlide C 层 use-after-free 崩溃。
+        """
         path = item.data(Qt.UserRole)
         if path and os.path.exists(path):
-            self.image_load_requested.emit(path)
+            self._pending_load_path = path
+            # 每次点击都重置定时器，保证最终只触发最后一次点击对应的路径
+            self._load_debounce_timer.start()
         else:
             QMessageBox.warning(self, "文件不存在", f"无法找到文件：\n{path}")
+
+    def _fire_load_request(self):
+        """防抖定时器到期后真正发射加载信号。"""
+        if self._pending_load_path:
+            self.image_load_requested.emit(self._pending_load_path)
+            self._pending_load_path = None
 
     def _on_context_menu(self, pos):
         """右键菜单：从列表中移除选中项。"""

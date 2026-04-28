@@ -255,10 +255,16 @@ class WSIView(QGraphicsView):
 
     def load_wsi(self, file_path):
         """加载 SVS 文件并初始化绝对坐标系"""
-        # 关闭旧引擎，释放 OpenSlide 文件句柄
-        if self.slide_engine:
-            self.slide_engine.close()
-            self.slide_engine = None
+        self.render_timer.stop()
+        self.render_worker.stop()  # 清空待执行队列
+        self.render_version += 1000  # 大步跳版本，令所有旧任务立即视为过期
+
+        old_engine = self.slide_engine
+        self.slide_engine = None  # 先置 None，阻止新的渲染请求使用旧引擎
+
+        if old_engine:
+            # 延迟关闭：600ms 后执行，给 in-flight 的 read_region 留足完成时间
+            QTimer.singleShot(600, old_engine.close)
 
         try:
             self.slide_engine = WSIDataEngine(file_path)
