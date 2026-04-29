@@ -162,9 +162,9 @@ class AnalysisRunnerMixin:
         db = DatabaseManager()
         nms_iou_thresh = db.get_setting("ai_nms_iou_thresh", 0.25)
 
-        from core.roi_manager import ROIManager
+        from core.roi_manager import fuse_results
 
-        fused = ROIManager.fuse_results(
+        fused = fuse_results(
             getattr(self, "current_ai_results", []), new_results, nms_iou_thresh
         )
 

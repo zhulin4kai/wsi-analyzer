@@ -1,6 +1,4 @@
 import concurrent.futures
-import json
-import os
 
 import cv2
 import numpy as np
@@ -9,10 +7,8 @@ from tqdm import tqdm
 import config
 from core.image_server import ImageServer
 from core.model_adapters import ModelAdapterFactory
-from core.roi_manager import ROIManager
+from core.roi_manager import generate_roi_coordinates
 from utils import logger
-from utils.db_manager import DatabaseManager
-from utils.hardware_profiler import HardwareProfiler
 from utils.nms import nms_numpy
 
 
@@ -21,85 +17,53 @@ class WSIAnalyzer:
         self,
         svs_path,
         model_path,
-        patch_size=None,
-        stride=None,
-        nms_iou_thresh=None,
-        conf_thresh=None,
+        patch_size=512,
+        stride=400,
+        nms_iou_thresh=0.25,
+        conf_thresh=0.5,
+        device="cpu",
+        batch_size=16,
     ):
         self.svs_path = svs_path
-        # 读取并用安全边界过滤异常数值
-        raw_patch_size = (
-            patch_size
-            if patch_size is not None
-            else getattr(config, "AI_PATCH_SIZE", 512)
-        )
+
         self.patch_size = max(
             getattr(config, "AI_PATCH_SIZE_MIN", 128),
-            min(raw_patch_size, getattr(config, "AI_PATCH_SIZE_MAX", 4096)),
+            min(patch_size, getattr(config, "AI_PATCH_SIZE_MAX", 4096)),
         )
 
-        raw_stride = stride if stride is not None else getattr(config, "AI_STRIDE", 400)
         self.stride = max(
             getattr(config, "AI_STRIDE_MIN", 64),
-            min(raw_stride, getattr(config, "AI_STRIDE_MAX", 4096)),
+            min(stride, getattr(config, "AI_STRIDE_MAX", 4096)),
         )
 
-        # 自动纠正：步长不应大于切片尺寸，以避免漏检
         if self.stride > self.patch_size:
             logger.warning(
                 f"自动纠正: 步长 ({self.stride}) 大于切片尺寸 ({self.patch_size})，已修改为 {self.patch_size}。"
             )
             self.stride = self.patch_size
 
-        raw_iou = (
-            nms_iou_thresh
-            if nms_iou_thresh is not None
-            else getattr(config, "AI_NMS_IOU_THRESH", 0.25)
-        )
         self.nms_iou_thresh = max(
             getattr(config, "AI_NMS_IOU_THRESH_MIN", 0.01),
-            min(raw_iou, getattr(config, "AI_NMS_IOU_THRESH_MAX", 1.0)),
+            min(nms_iou_thresh, getattr(config, "AI_NMS_IOU_THRESH_MAX", 1.0)),
         )
 
-        raw_conf = (
-            conf_thresh
-            if conf_thresh is not None
-            else getattr(config, "AI_CONF_THRESH", 0.5)
-        )
         self.conf_thresh = max(
             getattr(config, "AI_CONF_THRESH_MIN", 0.01),
-            min(raw_conf, getattr(config, "AI_CONF_THRESH_MAX", 1.0)),
+            min(conf_thresh, getattr(config, "AI_CONF_THRESH_MAX", 1.0)),
         )
 
-        # 动态拉取环境参数
-        drive_prefix = os.path.splitdrive(os.path.abspath(svs_path))[0]
-        db = DatabaseManager()
-        profile = db.get_system_profile(drive_prefix)
-
-        if profile:
-            self.device = profile.get("device", HardwareProfiler.get_compute_device())
-            self.batch_size = profile.get("batch_size", 16)
-        else:
-            self.device = HardwareProfiler.get_compute_device()
-            self.batch_size = 16
-
-        # 强制限制读取的旧配置，防止遗留的极大 batch_size 导致 Windows 下卡死
+        self.device = device
         self.batch_size = min(
-            self.batch_size, getattr(config, "BATCH_SIZE_CAP_NVME_SSD", 64)
+            batch_size, getattr(config, "BATCH_SIZE_CAP_NVME_SSD", 64)
         )
 
         logger.info(f"[*] 使用计算设备: {self.device}, Batch Size: {self.batch_size}")
 
         self._is_cancelled = False
 
-        # 动态加载并实例化 AI 模型适配器
-        model_type = db.get_setting("ai_model_type", "YOLO")
-        logger.info(f"[*] 正在加载 {model_type} 模型: {model_path}")
-        self.model_adapter = ModelAdapterFactory.create_adapter(
-            model_path, model_type=model_type
-        )
+        logger.info(f"[*] 正在加载模型: {model_path}")
+        self.model_adapter = ModelAdapterFactory.create_adapter(model_path)
 
-        # 通过 SlidePool 借用引擎；分析期间引用计数保持 >= 1，池不会驱逐该引擎
         logger.info(f"[*] 正在打开 WSI 文件: {svs_path}")
         self.slide_engine = ImageServer.instance().acquire_engine(svs_path)
         self.level_0_dim = self.slide_engine.level_0_dim
@@ -293,7 +257,7 @@ class WSIAnalyzer:
             )
             roi_stride = int(self.patch_size * getattr(config, "ROI_STRIDE_RATIO", 0.5))
             W, H = self.level_0_dim
-            valid_coords = ROIManager.generate_roi_coordinates(
+            valid_coords = generate_roi_coordinates(
                 roi_bbox,
                 self.patch_size,
                 roi_stride,
@@ -414,7 +378,6 @@ class WSIAnalyzer:
                 "total_patches": total_patches,
             }
 
-        # if status_callback: status_callback("阶段 4/4: 正在执行全局非极大值抑制 (NMS)...")
         final_results = self._apply_global_nms(
             global_boxes, global_scores, global_classes
         )
@@ -430,7 +393,10 @@ class WSIAnalyzer:
         }
 
     def close(self):
-        """释放引擎引用，引用计数归零后 SlidePool 可按 LRU 策略回收。"""
+        """释放引擎引用和模型资源。"""
         if hasattr(self, "slide_engine") and self.slide_engine is not None:
             ImageServer.instance().release_engine(self.svs_path)
             self.slide_engine = None
+        if hasattr(self, "model_adapter") and self.model_adapter is not None:
+            del self.model_adapter
+            self.model_adapter = None

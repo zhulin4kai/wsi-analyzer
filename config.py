@@ -5,7 +5,7 @@ RENDER_DEBOUNCE_MS = 50
 IDLE_THRESHOLD_MS = 100
 
 # AI 预测框视觉配置
-AI_PEN_COLOR = (255, 0, 0)
+AI_PEN_COLOR = (0, 255, 0)
 AI_PEN_WIDTH = 2
 
 # 硬件环境自适应与 AI 参数动态调优配置

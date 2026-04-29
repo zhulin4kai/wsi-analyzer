@@ -98,12 +98,10 @@ class YOLOAdapter(BaseModelAdapter):
         return 512
 
 class ModelAdapterFactory:
-    """
-    模型适配器工厂
-    """
+    """模型适配器工厂"""
 
     @staticmethod
-    def create_adapter(model_path: str, model_type: str = "YOLO") -> BaseModelAdapter:
+    def create_adapter(model_path: str) -> BaseModelAdapter:
         ext = os.path.splitext(model_path)[1].lower()
 
         if ext == ".pt":

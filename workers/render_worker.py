@@ -5,8 +5,8 @@ from workers.tile_scheduler import PriorityTileScheduler, TileSchedulerSignals
 
 
 class RenderWorker(QObject):
-    """基于 PriorityTileScheduler 的并发瓦片渲染协调器。
-
+    """
+    基于 PriorityTileScheduler 的并发瓦片渲染协调器。
     作为调度器的薄适配层：对外保持与原有 ``image_ready`` 信号相同的接口，
     内部将所有任务分发委托给 ``PriorityTileScheduler``。
     """
@@ -38,10 +38,6 @@ class RenderWorker(QObject):
     def set_version(self, version: int) -> None:
         """推进活跃渲染版本号，使旧版本任务被跳过。"""
         self._scheduler.set_version(version)
-
-    # ------------------------------------------------------------------
-    # 任务提交
-    # ------------------------------------------------------------------
 
     def request_render(
         self,
