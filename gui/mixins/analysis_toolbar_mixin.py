@@ -83,7 +83,7 @@ class AnalysisToolbarMixin:
     def select_model(self):
         """打开文件对话框选择模型权重，并根据模型信息执行智能调优。"""
         file_path, _ = QFileDialog.getOpenFileName(
-            self, "选择 AI 模型", "", "Model Files (*.pt *.onnx *.pth)"
+            self, "选择 AI 模型", "", "Model Files (*.pt *.pth)"
         )
         if not file_path:
             return
@@ -93,11 +93,9 @@ class AnalysisToolbarMixin:
 
         db = DatabaseManager()
 
-        # 智能调优：从模型元数据中读取推荐 patch size
+        # 从模型元数据中读取推荐 patch size
         if db.get_auto_tune_enabled() and file_path.endswith(".pt"):
             self._auto_tune_from_yolo(file_path, db)
-        elif db.get_auto_tune_enabled() and file_path.endswith(".onnx"):
-            self._auto_tune_from_onnx(file_path, db)
 
         # 模型体积动态变化时重新计算最优 batch size
         if self.current_wsi_path:
@@ -118,25 +116,7 @@ class AnalysisToolbarMixin:
         except ImportError:
             self.statusBar().showMessage(
                 "提示: 当前环境未安装 ultralytics，无法从 .pt 文件读取模型参数。"
-                "建议使用 export_onnx.py 将模型转换为 .onnx 格式后重新选择。"
             )
-        except Exception:
-            pass
-
-    def _auto_tune_from_onnx(self, file_path: str, db: DatabaseManager):
-        """从 ONNX 模型输入形状读取推荐 patch size 并写入设置。"""
-        try:
-            import onnxruntime as ort
-
-            session = ort.InferenceSession(
-                file_path, providers=["CPUExecutionProvider"]
-            )
-            input_shape = session.get_inputs()[0].shape
-            if len(input_shape) >= 4 and isinstance(input_shape[2], int):
-                db.set_setting("ai_patch_size", input_shape[2])
-                self.statusBar().showMessage(
-                    f"智能调优: 已根据 ONNX 模型设置 Patch Size = {input_shape[2]}"
-                )
         except Exception:
             pass
 

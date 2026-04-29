@@ -19,12 +19,14 @@ class AnalysisRunnerMixin:
         QProgressDialog.closeEvent 会主动 emit canceled() 信号，若不提前断开
         会意外触发 cancel_ai_analysis，导致确认框在分析正常结束后再次弹出。
         """
-        if hasattr(self, "progress_dialog") and self.progress_dialog:
-            try:
-                self.progress_dialog.canceled.disconnect(self.cancel_ai_analysis)
-            except Exception:
-                pass
-            self.progress_dialog.close()
+        if not hasattr(self, "progress_dialog") or not self.progress_dialog:
+            return
+        try:
+            self.progress_dialog.canceled.disconnect(self.cancel_ai_analysis)
+        except (TypeError, RuntimeError):
+            pass
+        self.progress_dialog.close()
+        self.progress_dialog = None
 
     def start_ai_analysis(self):
         """启动全片后台推断"""
@@ -103,7 +105,7 @@ class AnalysisRunnerMixin:
         if not getattr(self, "current_model_path", None):
             self.viewer.clear_roi_box()
             QMessageBox.warning(
-                self, "警告", "请先选择 AI 模型权重文件 (.pt / .onnx)！"
+                self, "警告", "请先选择 AI 模型权重文件 (.pt)！"
             )
             return
 
@@ -218,6 +220,10 @@ class AnalysisRunnerMixin:
         if msg_box.clickedButton() == btn_yes:
             if self.ai_thread and self.ai_thread.isRunning():
                 self.ai_thread.cancel()
+            # 重新连接信号，确保后续 _close_progress_dialog 能正常断开；
+            # 之后 on_ai_finished_roi 会统一关闭进度对话框
+            if hasattr(self, "progress_dialog") and self.progress_dialog:
+                self.progress_dialog.canceled.connect(self.cancel_ai_analysis)
         else:
             if hasattr(self, "progress_dialog"):
                 # 重置进度条以清除内部的 wasCanceled 锁定状态

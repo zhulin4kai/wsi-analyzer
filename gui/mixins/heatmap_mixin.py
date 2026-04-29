@@ -148,7 +148,7 @@ class HeatmapMixin:
         rgba = cv2.cvtColor(colormap_bgr, cv2.COLOR_BGR2RGBA)
 
         alpha_channel = np.clip(
-            np.power(grid_norm, gamma) * float(HEATMAP_ALPHA), 0, 255
+            np.power(grid_norm, HEATMAP_ALPHA_GAMMA) * float(HEATMAP_ALPHA), 0, 255
         ).astype(np.uint8)
         rgba[:, :, 3] = alpha_channel
 

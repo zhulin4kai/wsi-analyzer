@@ -47,10 +47,6 @@ class SettingsDialog(QDialog):
         # 初始化启用状态
         self._toggle_ai_inputs()
 
-    # ------------------------------------------------------------------
-    # Tab 构建
-    # ------------------------------------------------------------------
-
     def _build_basic_tab(self):
         tab = QWidget()
         layout = QFormLayout(tab)
@@ -112,7 +108,7 @@ class SettingsDialog(QDialog):
         self.chk_auto_tune.setChecked(self._db.get_auto_tune_enabled())
 
         self.combo_model_type = QComboBox()
-        self.combo_model_type.addItems(["YOLO", "ONNX"])
+        self.combo_model_type.addItems(["YOLO"])
         self.combo_model_type.setCurrentText(
             self._db.get_setting("ai_model_type", "YOLO")
         )
@@ -161,10 +157,6 @@ class SettingsDialog(QDialog):
 
         return tab
 
-    # ------------------------------------------------------------------
-    # 内部槽
-    # ------------------------------------------------------------------
-
     def _toggle_ai_inputs(self):
         is_manual = not self.chk_auto_tune.isChecked()
         is_yolo = self.combo_model_type.currentText() == "YOLO"
@@ -185,10 +177,6 @@ class SettingsDialog(QDialog):
             )
             return
         self.accept()
-
-    # ------------------------------------------------------------------
-    # 公共接口
-    # ------------------------------------------------------------------
 
     def apply_settings(self):
         """将对话框中的值持久化到数据库。需在 exec() 返回 Accepted 后调用。"""

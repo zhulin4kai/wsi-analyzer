@@ -14,16 +14,14 @@ class HardwareProfiler:
         返回优先顺序：cuda -> mps -> cpu
         """
         try:
-            import onnxruntime as ort
+            import torch
 
-            providers = ort.get_available_providers()
-            if "CUDAExecutionProvider" in providers:
+            if torch.cuda.is_available():
                 return "cuda"
-            if (
-                "CoreMLExecutionProvider" in providers
-                or "MPSExecutionProvider" in providers
-            ):
+            if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
                 return "mps"
+        except ImportError:
+            pass
         except Exception:
             pass
         return "cpu"

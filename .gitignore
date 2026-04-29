@@ -37,3 +37,4 @@ build
 *.dylib
 /data/wsi_data.db-shm
 /data/wsi_data.db-wal
+assets/
