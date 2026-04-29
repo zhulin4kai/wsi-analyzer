@@ -151,6 +151,8 @@ class ONNXObjectDetectionAdapter(BaseModelAdapter):
         )
 
         # 预处理：resize → 归一化 [0,1] → HWC to CHW
+        # 提前记录每张图的原始尺寸，用于后续将检测框坐标还原到 patch 空间
+        orig_sizes = [(img.width, img.height) for img in batch_imgs]
         _resample = getattr(getattr(Image, "Resampling", Image), "BILINEAR", 2)
         batch_tensor = []
         for img in batch_imgs:
@@ -194,6 +196,21 @@ class ONNXObjectDetectionAdapter(BaseModelAdapter):
                 [cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2], axis=1
             )
 
+            # 若模型输入尺寸与原始 patch 尺寸不同，须将框坐标从模型输入空间
+            # 缩放回原始 patch 像素空间，否则后续拼接全局偏移时坐标会偏移错误
+            orig_w, orig_h = orig_sizes[b]
+            if target_w != orig_w or target_h != orig_h:
+                scale = np.array(
+                    [
+                        orig_w / target_w,
+                        orig_h / target_h,
+                        orig_w / target_w,
+                        orig_h / target_h,
+                    ],
+                    dtype=np.float32,
+                )
+                boxes_xyxy = boxes_xyxy * scale
+
             batch_results.append((boxes_xyxy, scores_f, class_ids_f))
 
         return batch_results
@@ -217,9 +234,7 @@ class ModelAdapterFactory:
     """
 
     @staticmethod
-    def create_adapter(
-        model_path: str, model_type: str = "YOLO", patch_size: int = 512
-    ) -> BaseModelAdapter:
+    def create_adapter(model_path: str, model_type: str = "YOLO") -> BaseModelAdapter:
         model_type = model_type.upper()
         ext = os.path.splitext(model_path)[1].lower()
 

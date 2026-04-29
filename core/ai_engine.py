@@ -96,7 +96,7 @@ class WSIAnalyzer:
         model_type = db.get_setting("ai_model_type", "YOLO")
         logger.info(f"[*] 正在加载 {model_type} 模型: {model_path}")
         self.model_adapter = ModelAdapterFactory.create_adapter(
-            model_path, model_type=model_type, patch_size=self.patch_size
+            model_path, model_type=model_type
         )
 
         # 通过 SlidePool 借用引擎；分析期间引用计数保持 >= 1，池不会驱逐该引擎
@@ -138,8 +138,9 @@ class WSIAnalyzer:
     def _generate_patch_coordinates(self, solid_mask, downsample_factor):
         W, H = self.level_0_dim
         valid_coords = []
-        for y in range(0, H - self.patch_size, self.stride):
-            for x in range(0, W - self.patch_size, self.stride):
+        # +1 确保末行/末列切片不被 range 截断（修复 Off-by-One）
+        for y in range(0, H - self.patch_size + 1, self.stride):
+            for x in range(0, W - self.patch_size + 1, self.stride):
                 cx_level0 = x + self.patch_size / 2
                 cy_level0 = y + self.patch_size / 2
                 mask_x = min(
@@ -159,7 +160,6 @@ class WSIAnalyzer:
         total_patches=0,
         processed_patches=0,
         progress_callback=None,
-        is_roi=False,
     ):
         global_boxes = []
         global_scores = []
@@ -169,65 +169,82 @@ class WSIAnalyzer:
         # 动态组装批次
         i = 0
         pbar = tqdm(total=len(valid_coords), desc="推理进度")
-        while i < len(valid_coords):
-            if self._is_cancelled:
-                break
 
-            batch_coords = valid_coords[i : i + self.batch_size]
-            i += len(batch_coords)
+        # 线程池在整个推理过程中复用，避免每批次重建/销毁的开销
+        # fetch_patch 只引用 self，在循环外定义一次即可
+        def fetch_patch(coord):
+            x_min, y_min = coord
+            patch_rgba = self.slide_engine.read_region(
+                (x_min, y_min), 0, (self.patch_size, self.patch_size)
+            )
+            return patch_rgba.convert("RGB")
 
-            def fetch_patch(coord):
-                x_min, y_min = coord
-                patch_rgba = self.slide_engine.read_region(
-                    (x_min, y_min), 0, (self.patch_size, self.patch_size)
-                )
-                return patch_rgba.convert("RGB")
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+            while i < len(valid_coords):
+                if self._is_cancelled:
+                    break
 
-            # 采用线程池并发读取图像，提高数据加载效率
-            with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+                batch_coords = valid_coords[i : i + self.batch_size]
+                i += len(batch_coords)
+
+                # 并发读取当前批次图像
                 batch_imgs = list(executor.map(fetch_patch, batch_coords))
 
-            try:
-                results = self.model_adapter.predict(
-                    batch_imgs, device=self.device, conf_thresh=self.conf_thresh
-                )
-            except RuntimeError as e:
-                # 捕获 OOM 异常并执行降级重试
-                if (
-                    "out of memory" in str(e).lower()
-                    or "oom" in str(e).lower()
-                    or "memory" in str(e).lower()
-                ):
-                    logger.warning("发生显存溢出 (OOM)，正在缩减 Batch Size 进行重试")
-                    self.batch_size = max(1, self.batch_size // 2)
-                    # 回退指针，重新处理当前批次
-                    i -= len(batch_coords)
-                    continue
-                else:
-                    raise e
-
-            for j, (boxes, scores, classes) in enumerate(results):
-                X_min, Y_min = batch_coords[j]
-                if len(boxes) == 0:
-                    continue
-
-                for box, score, cls_id in zip(boxes, scores, classes):
-                    loc_x1, loc_y1, loc_x2, loc_y2 = box
-                    global_boxes.append(
-                        [loc_x1 + X_min, loc_y1 + Y_min, loc_x2 + X_min, loc_y2 + Y_min]
+                try:
+                    results = self.model_adapter.predict(
+                        batch_imgs, device=self.device, conf_thresh=self.conf_thresh
                     )
-                    global_scores.append(score)
-                    global_classes.append(cls_id)
+                except RuntimeError as e:
+                    # 捕获 OOM 异常并执行降级重试
+                    if (
+                        "out of memory" in str(e).lower()
+                        or "oom" in str(e).lower()
+                        or "memory" in str(e).lower()
+                    ):
+                        # batch_size 已降至 1 时无法再缩减，直接抛出避免无限循环
+                        if self.batch_size <= 1:
+                            logger.error("Batch Size 已降至 1 但显存仍不足，终止推理。")
+                            raise RuntimeError(
+                                "显存不足且 Batch Size 已降至最小值 (1)，无法继续推理。"
+                                "请减小图块尺寸或释放显存后重试。"
+                            ) from e
+                        logger.warning(
+                            "发生显存溢出 (OOM)，正在缩减 Batch Size 进行重试"
+                        )
+                        self.batch_size = max(1, self.batch_size // 2)
+                        # 回退指针，重新处理当前批次
+                        i -= len(batch_coords)
+                        continue
+                    else:
+                        raise e
 
-            current_processed += len(batch_coords)
-            pbar.update(len(batch_coords))
+                for j, (boxes, scores, classes) in enumerate(results):
+                    X_min, Y_min = batch_coords[j]
+                    if len(boxes) == 0:
+                        continue
 
-            # 触发进度条更新
-            if progress_callback and total_patches > 0:
-                progress_percent = int(
-                    (processed_patches + current_processed) / total_patches * 100
-                )
-                progress_callback(progress_percent)
+                    for box, score, cls_id in zip(boxes, scores, classes):
+                        loc_x1, loc_y1, loc_x2, loc_y2 = box
+                        global_boxes.append(
+                            [
+                                loc_x1 + X_min,
+                                loc_y1 + Y_min,
+                                loc_x2 + X_min,
+                                loc_y2 + Y_min,
+                            ]
+                        )
+                        global_scores.append(score)
+                        global_classes.append(cls_id)
+
+                current_processed += len(batch_coords)
+                pbar.update(len(batch_coords))
+
+                # 触发进度条更新
+                if progress_callback and total_patches > 0:
+                    progress_percent = int(
+                        (processed_patches + current_processed) / total_patches * 100
+                    )
+                    progress_callback(progress_percent)
 
         pbar.close()
         return global_boxes, global_scores, global_classes, current_processed
@@ -257,7 +274,6 @@ class WSIAnalyzer:
         progress_callback=None,
         status_callback=None,
         roi_bbox=None,
-        is_roi=False,
     ):
         """处理推理逻辑并通过回调更新状态"""
         self._is_cancelled = False
@@ -291,12 +307,18 @@ class WSIAnalyzer:
                 status_callback("阶段 1/4: 发现断点缓存，跳过掩码生成...")
             valid_coords = resume_data["valid_coords"]
             processed_patches = resume_data.get("processed_patches", 0)
-            old_results = resume_data.get("results", [])
 
-            for r in old_results:
-                global_boxes.append(r["bbox"])
-                global_scores.append(r["confidence"])
-                global_classes.append(r["class_id"])
+            # 优先使用未经 NMS 的原始框，确保续传时全局 NMS 可基于完整信息重算
+            if "raw_boxes" in resume_data:
+                global_boxes = list(resume_data["raw_boxes"])
+                global_scores = list(resume_data["raw_scores"])
+                global_classes = list(resume_data["raw_classes"])
+            else:
+                # 兼容旧格式：从 post-NMS 结果中重建（跨批 NMS 精度略有损失）
+                for r in resume_data.get("results", []):
+                    global_boxes.append(r["bbox"])
+                    global_scores.append(r["confidence"])
+                    global_classes.append(r["class_id"])
         else:
             if status_callback:
                 status_callback("阶段 1/4: 正在提取宏观图像与生成组织掩码...")
@@ -320,10 +342,12 @@ class WSIAnalyzer:
             )
 
         if not valid_coords:
+            msg = "未提取到有效的组织区域。"
             if status_callback:
-                status_callback("错误: 未提取到有效的组织区域。")
+                status_callback(f"错误: {msg}")
             return {
-                "status": "completed",
+                "status": "error",
+                "message": msg,
                 "results": [],
                 "valid_coords": [],
                 "processed_patches": 0,
@@ -332,15 +356,18 @@ class WSIAnalyzer:
 
         max_patches = getattr(config, "AI_MAX_PATCHES_LIMIT", 100000)
         if len(valid_coords) > max_patches:
+            msg = (
+                f"提取的图像块过多 ({len(valid_coords)} > {max_patches})，"
+                "请检查并调大滑动步长。"
+            )
             logger.warning(
                 f"生成的图块数量 ({len(valid_coords)}) 超过安全上限 ({max_patches})！"
             )
             if status_callback:
-                status_callback(
-                    f"错误: 提取的图像块过多 ({len(valid_coords)} > {max_patches})，请检查并调大滑动步长。"
-                )
+                status_callback(f"错误: {msg}")
             return {
-                "status": "completed",
+                "status": "error",
+                "message": msg,
                 "results": [],
                 "valid_coords": [],
                 "processed_patches": 0,
@@ -361,7 +388,6 @@ class WSIAnalyzer:
             total_patches=total_patches,
             processed_patches=processed_patches,
             progress_callback=progress_callback,
-            is_roi=is_roi,
         )
 
         global_boxes.extend(new_boxes)
@@ -379,6 +405,10 @@ class WSIAnalyzer:
             return {
                 "status": "interrupted",
                 "results": final_results,
+                # 保存原始框，续传时全局 NMS 可基于完整 pre-NMS 数据重算
+                "raw_boxes": global_boxes,
+                "raw_scores": global_scores,
+                "raw_classes": global_classes,
                 "valid_coords": valid_coords,
                 "processed_patches": final_processed,
                 "total_patches": total_patches,

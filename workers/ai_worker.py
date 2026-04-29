@@ -54,8 +54,11 @@ class AIAnalysisWorker(QThread):
                 auto_params = HardwareProfiler.calculate_auto_tune_params(
                     io_speed, patch_size, model_size_mb
                 )
-                stride = auto_params["stride"]
-                conf_thresh = auto_params["conf_thresh"]
+                # 使用 .get() 安全读取，未返回的键保持数据库原值
+                stride = auto_params.get("stride", stride)
+                conf_thresh = auto_params.get("conf_thresh", conf_thresh)
+                patch_size = auto_params.get("patch_size", patch_size)
+                nms_iou_thresh = auto_params.get("nms_iou_thresh", nms_iou_thresh)
 
             self.analyzer = WSIAnalyzer(
                 svs_path=self.svs_path,
@@ -72,24 +75,22 @@ class AIAnalysisWorker(QThread):
                 progress_callback=lambda p: self.progress_updated.emit(p),
                 status_callback=lambda s: self.status_updated.emit(s),
                 roi_bbox=self.roi_bbox,
-                is_roi=(self.roi_bbox is not None),
             )
 
-            if results_dict is None or (
-                len(results_dict.get("valid_coords", [])) == 0
-                and results_dict.get("status") != "completed"
-            ):
-                self.error_occurred.emit("未提取到有效组织区域，分析终止")
+            if results_dict is None:
+                self.error_occurred.emit("AI 引擎返回空结果")
+            elif results_dict.get("status") == "error":
+                # 配置校验错误（如图块超限），将引擎设置的 message 透传给 UI
+                self.error_occurred.emit(
+                    results_dict.get("message", "分析异常终止，请检查参数配置")
+                )
             else:
+                # 涵盖 "completed" 与 "interrupted" 两种终态，均交由上层处理
                 self.analysis_finished.emit(results_dict)
 
         except RuntimeError as re:
-            if "CUDA out of memory" in str(re):
-                self.error_occurred.emit(
-                    "显存不足 (CUDA OOM)，请在代码中调小 batch_size"
-                )
-            else:
-                self.error_occurred.emit(f"运行时错误: {str(re)}")
+            # 涵盖：CUDA OOM 降级至 batch_size=1 后仍 OOM、其他运行时错误
+            self.error_occurred.emit(f"运行时错误: {str(re)}")
         except Exception as e:
             self.error_occurred.emit(f"AI 引擎异常: {str(e)}")
         finally:
