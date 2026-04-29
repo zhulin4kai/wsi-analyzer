@@ -142,41 +142,49 @@ class AnalysisRunnerMixin:
         self.ai_thread.start()
 
     def on_ai_finished_roi(self, results_dict):
-        """处理局部 ROI 分析完成后的数据合并与 UI 更新"""
+        """ROI 分析完成回调：融合结果后委托 _commit_results 统一提交。"""
         self._close_progress_dialog()
         self.viewer.clear_roi_box()
 
-        status = results_dict.get("status")
-        if status == "completed":
-            self.statusBar().showMessage("局部 ROI 分析完成")
+        if results_dict.get("status") == "interrupted":
+            self.statusBar().showMessage("局部 ROI 分析已取消，结果未保存。")
+            QMessageBox.information(self, "提示", "ROI 分析已取消，结果未保存。")
+            return
 
-            new_results = results_dict.get("results", [])
-            if not new_results:
-                QMessageBox.information(self, "提示", "未在该区域检测到病灶。")
-                return
+        new_results = results_dict.get("results", [])
+        if not new_results:
+            self.statusBar().showMessage("局部 ROI 分析完成，未检测到病灶。")
+            QMessageBox.information(self, "提示", "未在该区域检测到病灶。")
+            return
 
-            db = DatabaseManager()
-            nms_iou_thresh = db.get_setting("ai_nms_iou_thresh", 0.25)
+        db = DatabaseManager()
+        nms_iou_thresh = db.get_setting("ai_nms_iou_thresh", 0.25)
 
-            from core.roi_manager import ROIManager
+        from core.roi_manager import ROIManager
 
-            current_results = getattr(self, "current_ai_results", [])
-            fused_results = ROIManager.fuse_results(
-                current_results, new_results, nms_iou_thresh
-            )
+        fused = ROIManager.fuse_results(
+            getattr(self, "current_ai_results", []), new_results, nms_iou_thresh
+        )
 
-            self.current_ai_results = fused_results
-            self.gallery.load_results(self.current_wsi_path, self.current_ai_results)
-            self._draw_ai_boxes(self.current_ai_results)
-            self.btn_export.setEnabled(len(self.current_ai_results) > 0)
+        # ROI 完成后以 completed 状态覆盖写入；不携带续传字段
+        self._commit_results(
+            {
+                "status": "completed",
+                "results": fused,
+                "total_patches": results_dict.get("total_patches", 0),
+                "processed_patches": results_dict.get("processed_patches", 0),
+                "valid_coords": None,
+            }
+        )
 
-            QMessageBox.information(
-                self,
-                "完成",
-                f"局部 ROI 分析完成！合并后共检测到 {len(self.current_ai_results)} 个病灶。",
-            )
-        else:
-            self.statusBar().showMessage("局部 ROI 分析被中断")
+        self.statusBar().showMessage(
+            f"局部 ROI 分析完成，合并后共 {len(fused)} 处病灶。"
+        )
+        QMessageBox.information(
+            self,
+            "完成",
+            f"局部 ROI 分析完成！合并后共检测到 {len(fused)} 个病灶。",
+        )
 
     def cancel_ai_analysis(self):
         """弹出确认框后中断当前 AI 分析线程；用户选择继续则重新绑定取消信号。"""

@@ -9,21 +9,19 @@ from utils import DatabaseManager
 class DetectionLayerMixin:
     """AI 预测框的绘制、结果持久化及图层可见性控制。"""
 
-    def render_ai_results(self, results_dict):
-        """渲染预测结果"""
+    def _commit_results(self, results_dict):
+        """统一提交分析结果：更新内存、绘制预测框、热力图、DB 持久化、画廊刷新。
+        全图扫描与 ROI 分析共用此入口；调用前应已完成结果融合。
+        """
         self._close_progress_dialog()
 
         results = results_dict.get("results", [])
         status = results_dict.get("status", "completed")
-        valid_coords = results_dict.get("valid_coords", [])
-        processed_patches = results_dict.get("processed_patches", 0)
-        total_patches = results_dict.get("total_patches", 0)
 
-        self._draw_ai_boxes(results)
         self.current_ai_results = results
+        self._draw_ai_boxes(results)
         self.btn_export.setEnabled(len(results) > 0)
 
-        # 通知热力图层更新（可选钩子，依赖 HeatmapMixin）
         if hasattr(self, "_update_heatmap_layer"):
             self._update_heatmap_layer()
 
@@ -33,23 +31,29 @@ class DetectionLayerMixin:
                 file_path=self.current_wsi_path,
                 model_path=self.current_model_path or "",
                 status=status,
-                total_patches=total_patches,
-                processed_patches=processed_patches,
+                total_patches=results_dict.get("total_patches", 0),
+                processed_patches=results_dict.get("processed_patches", 0),
                 results=results,
-                valid_coords=valid_coords,
+                valid_coords=results_dict.get("valid_coords"),
+                raw_boxes=results_dict.get("raw_boxes"),
+                raw_scores=results_dict.get("raw_scores"),
+                raw_classes=results_dict.get("raw_classes"),
             )
 
+        self.gallery.load_results(self.current_wsi_path, results)
+
+    def render_ai_results(self, results_dict):
+        """全图扫描完成/中断时的回调，委托 _commit_results 完成持久化与 UI 更新。"""
+        self._commit_results(results_dict)
+
+        status = results_dict.get("status", "completed")
+        count = len(results_dict.get("results", []))
         if status == "completed":
-            QMessageBox.information(
-                self, "分析完成", f"共标记 {len(results)} 处疑似病灶。"
-            )
+            QMessageBox.information(self, "分析完成", f"共标记 {count} 处疑似病灶。")
         else:
             QMessageBox.information(
-                self, "分析已中止", f"进度已保存。当前标记 {len(results)} 处疑似病灶。"
+                self, "分析已中止", f"进度已保存。当前标记 {count} 处疑似病灶。"
             )
-
-        # 开始生成画廊缩略图
-        self.gallery.load_results(self.current_wsi_path, results)
 
     def _draw_ai_boxes(self, results):
         """清空旧预测框并根据传入结果在 Scene 上重新绘制。"""

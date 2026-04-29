@@ -1,16 +1,20 @@
 # WSI 全片分析结果与断点续传进度
 # status: 'completed' (已完成) | 'interrupted' (被中断)
+# raw_detections_json: 仅 interrupted 状态时有值，存储 pre-NMS 原始检测数据
+#   格式: {"boxes": [[x1,y1,x2,y2],...], "scores": [...], "classes": [...]}
+#   续传时优先使用此字段，以保证全局 NMS 结果正确
 SQL_CREATE_WSI_ANALYSIS = """
     CREATE TABLE IF NOT EXISTS wsi_analysis (
-        wsi_hash          TEXT PRIMARY KEY,
-        file_path         TEXT,
-        model_path        TEXT,
-        status            TEXT,
-        total_patches     INTEGER,
-        processed_patches INTEGER,
-        results_json      TEXT,
-        valid_coords_json TEXT,
-        updated_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        wsi_hash            TEXT PRIMARY KEY,
+        file_path           TEXT,
+        model_path          TEXT,
+        status              TEXT,
+        total_patches       INTEGER,
+        processed_patches   INTEGER,
+        results_json        TEXT,
+        valid_coords_json   TEXT,
+        raw_detections_json TEXT,
+        updated_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
 """
 

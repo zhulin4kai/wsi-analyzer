@@ -54,6 +54,14 @@ class DatabaseManager:
                         (key, value),
                     )
 
+                # 旧版数据库迁移：补充 raw_detections_json 列（列已存在时忽略）
+                try:
+                    cursor.execute(
+                        "ALTER TABLE wsi_analysis ADD COLUMN raw_detections_json TEXT"
+                    )
+                except sqlite3.OperationalError:
+                    pass  # 列已存在
+
                 conn.commit()
 
             self.enforce_capacity_limit()
@@ -91,17 +99,15 @@ class DatabaseManager:
         processed_patches,
         results,
         valid_coords=None,
+        raw_boxes=None,
+        raw_scores=None,
+        raw_classes=None,
     ):
         """
         保存分析结果或中断进度到数据库。
 
-        :param file_path: WSI 切片绝对路径
-        :param model_path: AI 权重绝对路径
-        :param status: 'completed' 或 'interrupted'
-        :param total_patches: 总需要推理的图块数量
-        :param processed_patches: 已经推断完成的图块数量
-        :param results: 当前检测到的病灶框数据 (List)
-        :param valid_coords: 所有的组织坐标点阵 (断点续传需要)
+        :param raw_boxes/raw_scores/raw_classes: pre-NMS 原始检测数据，
+               仅 interrupted 状态时传入，续传时用于保证全局 NMS 正确。
         """
         wsi_hash = self.get_wsi_hash(file_path)
         if not wsi_hash:
@@ -109,6 +115,14 @@ class DatabaseManager:
 
         results_json = json.dumps(results, ensure_ascii=False)
         valid_coords_json = json.dumps(valid_coords) if valid_coords else None
+        raw_detections_json = (
+            json.dumps(
+                {"boxes": raw_boxes, "scores": raw_scores, "classes": raw_classes},
+                ensure_ascii=False,
+            )
+            if raw_boxes is not None
+            else None
+        )
         updated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         try:
@@ -117,8 +131,10 @@ class DatabaseManager:
                 cursor.execute(
                     """
                     INSERT INTO wsi_analysis
-                    (wsi_hash, file_path, model_path, status, total_patches, processed_patches, results_json, valid_coords_json, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (wsi_hash, file_path, model_path, status, total_patches,
+                     processed_patches, results_json, valid_coords_json,
+                     raw_detections_json, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(wsi_hash) DO UPDATE SET
                         file_path=excluded.file_path,
                         model_path=excluded.model_path,
@@ -127,8 +143,9 @@ class DatabaseManager:
                         processed_patches=excluded.processed_patches,
                         results_json=excluded.results_json,
                         valid_coords_json=excluded.valid_coords_json,
+                        raw_detections_json=excluded.raw_detections_json,
                         updated_at=excluded.updated_at
-                """,
+                    """,
                     (
                         wsi_hash,
                         file_path,
@@ -138,6 +155,7 @@ class DatabaseManager:
                         processed_patches,
                         results_json,
                         valid_coords_json,
+                        raw_detections_json,
                         updated_at,
                     ),
                 )
@@ -177,7 +195,13 @@ class DatabaseManager:
                         if data["valid_coords_json"]
                         else None
                     )
-                    # 删除冗余的原始 json 字符串
+                    # 解析 pre-NMS 原始检测数据（续传时优先使用，避免双重 NMS）
+                    raw_str = data.pop("raw_detections_json", None)
+                    if raw_str:
+                        raw = json.loads(raw_str)
+                        data["raw_boxes"] = raw.get("boxes")
+                        data["raw_scores"] = raw.get("scores")
+                        data["raw_classes"] = raw.get("classes")
                     del data["results_json"]
                     del data["valid_coords_json"]
                     return data
