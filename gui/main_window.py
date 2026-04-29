@@ -353,6 +353,7 @@ class MainWindow(AnalysisMixin, FileHandlingMixin, QMainWindow):
         """初始化右侧高危病灶画廊"""
         self.gallery = LesionGallery(parent=self)
         self.gallery.navigate_requested.connect(self._navigate_to_lesion)
+        self.gallery.hide()  # 默认隐藏，有结果时再显示
         self.addDockWidget(Qt.RightDockWidgetArea, self.gallery)
 
     def _navigate_to_lesion(self, cx, cy):

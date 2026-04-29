@@ -109,14 +109,14 @@ class LesionGallery(QDockWidget):
         event.ignore()
 
     def load_results(self, wsi_path: str, results: list):
-        """
-        加载分析结果并启动后台异步切图
-        """
+        """加载分析结果并启动后台异步切图。"""
         self.clear_gallery()
 
         if not results or not wsi_path:
+            self.hide()
             return
 
+        self.show()
         self.current_wsi_path = wsi_path
 
         # 按照置信度倒序排序，取前 50 个病灶
@@ -174,14 +174,12 @@ class LesionGallery(QDockWidget):
         self.navigate_requested.emit(cx, cy)
 
     def clear_gallery(self):
-        """
-        清理画廊及相关线程资源
-        """
+        """清理画廊及相关线程资源。"""
         if self.gallery_worker:
-            # 取消连接并发送中断信号
             self.gallery_worker.thumb_ready.disconnect(self._on_thumb_ready)
             self.gallery_worker.cancel()
             self.gallery_worker = None
 
         self.list_widget.clear()
         self.current_wsi_path = None
+        self.hide()
