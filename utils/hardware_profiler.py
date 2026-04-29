@@ -4,6 +4,7 @@ import time
 import psutil
 
 import config
+from utils import logger
 
 
 class HardwareProfiler:
@@ -109,8 +110,9 @@ class HardwareProfiler:
             io_speed_mbps = (thumbnail_bytes / (1024 * 1024)) / elapsed_sec
             return io_speed_mbps
 
-        except Exception as _e:
-            return 20
+        except Exception as e:
+            logger.warning(f"I/O 测速失败，使用默认值 20 MB/s: {e}")
+            return 20.0
 
     @staticmethod
     def calculate_optimal_params(

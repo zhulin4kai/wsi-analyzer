@@ -7,22 +7,9 @@ from PySide6.QtGui import QImage
 
 from utils import logger
 
-# ---------------------------------------------------------------------------
-# 共享信号
-# ---------------------------------------------------------------------------
-
-
 class TileSchedulerSignals(QObject):
     """在主线程创建一次；由后台守护线程发射。"""
-
-    # path, version, level, col, row, qimg, x, y, scale
     image_ready = Signal(str, int, int, int, int, QImage, int, int, float)
-
-
-# ---------------------------------------------------------------------------
-# 任务
-# ---------------------------------------------------------------------------
-
 
 class ScheduledTileTask:
     """支持 heapq 优先级排序的瓦片渲染任务。"""
@@ -116,12 +103,6 @@ class ScheduledTileTask:
             if engine is not None:
                 server.release_engine(self.path)
 
-
-# ---------------------------------------------------------------------------
-# 调度器
-# ---------------------------------------------------------------------------
-
-
 class PriorityTileScheduler:
     """固定线程数的优先级瓦片调度器。
 
@@ -149,10 +130,6 @@ class PriorityTileScheduler:
             t = threading.Thread(target=self._worker_loop, daemon=True)
             t.start()
             self._workers.append(t)
-
-    # ------------------------------------------------------------------
-    # 公共 API
-    # ------------------------------------------------------------------
 
     def get_active_version(self) -> int:
         return self._active_version
@@ -219,10 +196,6 @@ class PriorityTileScheduler:
             t.join(timeout=2.0)
         self._workers.clear()
 
-    # ------------------------------------------------------------------
-    # 内部辅助方法
-    # ------------------------------------------------------------------
-
     def _purge_stale_locked(self) -> None:
         """移除版本号小于活跃版本的过期任务。调用方须持锁。"""
         v = self._active_version
@@ -240,12 +213,6 @@ class PriorityTileScheduler:
                     task = heapq.heappop(self._queue)
             if task is not None and task.version >= self._active_version:
                 task.run()
-
-
-# ---------------------------------------------------------------------------
-# 预取任务（Phase 4-A）
-# ---------------------------------------------------------------------------
-
 
 class PreloadTask(QRunnable):
     """预热 SlidePool 的 QRunnable 任务，不增加引擎引用计数。
@@ -271,6 +238,6 @@ class PreloadTask(QRunnable):
         try:
             from core import ImageServer
 
-            ImageServer.instance()._slide_pool.preload(self.path)
+            ImageServer.instance().preload_engine(self.path)
         except Exception as e:
             logger.warning(f"PreloadTask 预热失败 {self.path!r}: {e}")

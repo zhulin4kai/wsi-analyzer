@@ -2,6 +2,7 @@ import hashlib
 import json
 import os
 import sqlite3
+import threading
 from datetime import datetime
 
 import config
@@ -22,12 +23,14 @@ class DatabaseManager:
     """
 
     _instance = None
+    _init_lock = threading.Lock()
 
     def __new__(cls, db_path=DB_FILE):
-        """单例模式，确保全局复用同一个数据库连接池"""
         if cls._instance is None:
-            cls._instance = super(DatabaseManager, cls).__new__(cls)
-            cls._instance._init_db(db_path)
+            with cls._init_lock:
+                if cls._instance is None:
+                    cls._instance = super(DatabaseManager, cls).__new__(cls)
+                    cls._instance._init_db(db_path)
         return cls._instance
 
     def _init_db(self, db_path):
@@ -311,38 +314,38 @@ class DatabaseManager:
             logger.error(f"设置容量限制失败: {e}")
 
     def enforce_capacity_limit(self):
-        """自动容量控制：如果超出限制，则按时间顺序淘汰最旧的分析记录"""
+        """自动容量控制：超出限制时按时间顺序批量淘汰旧记录，最后执行一次 VACUUM。"""
         try:
             max_bytes = self.get_max_capacity() * 1024 * 1024
             if not os.path.exists(self.db_path):
                 return
 
+            deleted = False
             while os.path.getsize(self.db_path) > max_bytes:
                 with sqlite3.connect(self.db_path, timeout=5000) as conn:
                     cursor = conn.cursor()
                     cursor.execute(
-                        "SELECT wsi_hash FROM wsi_analysis ORDER BY updated_at ASC LIMIT 1"
+                        "SELECT wsi_hash FROM wsi_analysis "
+                        "ORDER BY updated_at ASC LIMIT 1"
                     )
                     row = cursor.fetchone()
                     if not row:
                         break
-
-                    wsi_hash = row[0]
                     cursor.execute(
-                        "DELETE FROM wsi_analysis WHERE wsi_hash = ?", (wsi_hash,)
+                        "DELETE FROM wsi_analysis WHERE wsi_hash = ?",
+                        (row[0],),
                     )
                     conn.commit()
-                    logger.info(f"数据库容量超限，已自动淘汰最旧记录: {wsi_hash}")
+                    deleted = True
+                    logger.info(f"数据库容量超限，已自动淘汰最旧记录: {row[0]}")
 
-                # 删除单条后立刻执行 VACUUM 以实际回收文件系统空间
-                # 注意：VACUUM 会锁定数据库，如果并发占用时可能抛出 OperationalError
+            if deleted:
                 try:
                     with sqlite3.connect(self.db_path, timeout=5000) as conn:
-                        conn.isolation_level = None  # VACUUM 不能在事务中运行
+                        conn.isolation_level = None
                         conn.execute("VACUUM")
                 except sqlite3.OperationalError as ve:
                     logger.warning(f"VACUUM 当前被占用，稍后重试: {ve}")
-                    break  # 跳出循环，避免引发数据异常
 
         except Exception as e:
             logger.error(f"执行容量限制清理失败: {e}")

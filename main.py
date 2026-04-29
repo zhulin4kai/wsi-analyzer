@@ -73,6 +73,10 @@ def run_qt_app(ready_event: multiprocessing.Event, msg_queue: multiprocessing.Qu
     exit_code = app.exec()
     logger.info(f"========== 系统正常退出，退出码: {exit_code} ==========")
 
+    from core import ImageServer
+
+    ImageServer.instance().shutdown()
+
     sys.exit(exit_code)
 
 
