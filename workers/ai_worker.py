@@ -38,6 +38,11 @@ class AIAnalysisWorker(QThread):
                 "ai_nms_iou_thresh", config.AI_NMS_IOU_THRESH
             )
             conf_thresh = db.get_setting("ai_conf_thresh", config.AI_CONF_THRESH)
+            target_mpp = float(
+                db.get_setting(
+                    "ai_model_target_mpp", config.AI_MODEL_TARGET_MPP
+                )
+            )
 
             # 解析计算设备与批大小
             import os
@@ -82,6 +87,7 @@ class AIAnalysisWorker(QThread):
                 conf_thresh=conf_thresh,
                 device=device,
                 batch_size=batch_size,
+                target_mpp=target_mpp,
             )
 
             results_dict = self.analyzer.process(

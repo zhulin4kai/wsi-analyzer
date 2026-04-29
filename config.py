@@ -52,6 +52,21 @@ AI_CONF_THRESH = 0.5
 AI_MASK_TARGET_LEVEL = 3
 AI_MIN_AREA_RATIO = 0.001
 
+# 模型训练时的目标物理分辨率（μm/px），用于自动匹配 WSI 金字塔层级
+# 默认 2.0 μm/px ≈ 5× 物镜等效；若 WSI 缺少 MPP 元数据则直接使用此值在 level 0 提取
+AI_MODEL_TARGET_MPP = 2.0
+
+# MPP ↔ 物镜倍率近似映射（μm/px），用于设置面板展示
+AI_MAG_OPTIONS = {
+    "1.25x": 8.0,
+    "2.5x": 4.0,
+    "5x": 2.0,
+    "10x": 1.0,
+    "20x": 0.5,
+    "40x": 0.25,
+    "自定义 (MPP)": None,
+}
+
 # AI 推理与图像处理安全边界配置
 AI_PATCH_SIZE_MIN = 128
 AI_PATCH_SIZE_MAX = 4096

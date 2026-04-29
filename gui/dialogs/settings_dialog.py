@@ -19,6 +19,14 @@ import config
 from utils import DatabaseManager
 
 
+def _mpp_to_label(mpp: float, options: dict) -> str:
+    """将 MPP 值反查为倍率标签，若未精确匹配则返回'自定义 (MPP)'。"""
+    for label, val in options.items():
+        if val is not None and abs(val - mpp) < 1e-4:
+            return label
+    return "自定义 (MPP)"
+
+
 class SettingsDialog(QDialog):
     """系统设置对话框"""
 
@@ -113,6 +121,28 @@ class SettingsDialog(QDialog):
             self._db.get_setting("ai_model_type", "YOLO")
         )
 
+        # 模型训练倍率 / MPP
+        self.combo_mag = QComboBox()
+        mag_options = getattr(config, "AI_MAG_OPTIONS", {})
+        self.combo_mag.addItems(list(mag_options.keys()))
+        # 根据已保存的 MPP 反查倍率标签
+        saved_mpp = float(
+            self._db.get_setting(
+                "ai_model_target_mpp", getattr(config, "AI_MODEL_TARGET_MPP", 2.0)
+            )
+        )
+        mag_label = _mpp_to_label(saved_mpp, mag_options)
+        self.combo_mag.setCurrentText(mag_label)
+        self.combo_mag.currentTextChanged.connect(self._on_mag_changed)
+
+        self.spin_mpp = QDoubleSpinBox()
+        self.spin_mpp.setRange(0.01, 100.0)
+        self.spin_mpp.setSingleStep(0.1)
+        self.spin_mpp.setDecimals(2)
+        self.spin_mpp.setValue(saved_mpp)
+        self.spin_mpp.setVisible(mag_label == "自定义 (MPP)")
+        self.spin_mpp.setToolTip("模型训练时的物理分辨率 (μm/px)")
+
         self.spin_patch_size = QSpinBox()
         self.spin_patch_size.setRange(128, 4096)
         self.spin_patch_size.setSingleStep(128)
@@ -147,6 +177,8 @@ class SettingsDialog(QDialog):
 
         layout.addRow("", self.chk_auto_tune)
         layout.addRow("模型架构 (Architecture):", self.combo_model_type)
+        layout.addRow("模型训练倍率:", self.combo_mag)
+        layout.addRow("模型目标 MPP (μm/px):", self.spin_mpp)
         layout.addRow("切片尺寸 (Patch Size):", self.spin_patch_size)
         layout.addRow("滑动步长 (Stride):", self.spin_stride)
         layout.addRow("NMS IOU 阈值:", self.spin_iou)
@@ -164,6 +196,16 @@ class SettingsDialog(QDialog):
         self.spin_stride.setEnabled(is_manual)
         self.spin_iou.setEnabled(is_manual)
         self.spin_conf.setEnabled(is_manual)
+
+    def _on_mag_changed(self, label: str):
+        """倍率下拉切换时，同步更新 MPP 输入框的值与可见性。"""
+        mag_options = getattr(config, "AI_MAG_OPTIONS", {})
+        mpp_val = mag_options.get(label)
+        if mpp_val is not None:
+            self.spin_mpp.setValue(mpp_val)
+            self.spin_mpp.setVisible(False)
+        else:
+            self.spin_mpp.setVisible(True)
 
     def _on_save_clicked(self):
         patch_size = self.spin_patch_size.value()
@@ -214,4 +256,5 @@ class SettingsDialog(QDialog):
         self._db.set_setting("ai_nms_iou_thresh", iou)
         self._db.set_setting("ai_conf_thresh", conf)
         self._db.set_setting("ai_model_type", self.combo_model_type.currentText())
+        self._db.set_setting("ai_model_target_mpp", str(self.spin_mpp.value()))
         self._db.set_auto_tune_enabled(self.chk_auto_tune.isChecked())

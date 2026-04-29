@@ -44,6 +44,7 @@ SQL_CREATE_SYSTEM_PROFILE = """
 SETTINGS_DEFAULTS = [
     ("max_capacity_mb", "150"),
     ("auto_tune_enabled", "True"),
+    ("ai_model_target_mpp", "2.0"),
 ]
 
 # 便捷集合：_init_db 按序执行所有 DDL 即可，无需关心具体表名

@@ -2,6 +2,7 @@ import concurrent.futures
 
 import cv2
 import numpy as np
+from PIL import Image
 from tqdm import tqdm
 
 import config
@@ -23,6 +24,7 @@ class WSIAnalyzer:
         conf_thresh=0.5,
         device="cpu",
         batch_size=16,
+        target_mpp=None,
     ):
         self.svs_path = svs_path
 
@@ -67,6 +69,24 @@ class WSIAnalyzer:
         logger.info(f"[*] 正在打开 WSI 文件: {svs_path}")
         self.slide_engine = ImageServer.instance().acquire_engine(svs_path)
         self.level_0_dim = self.slide_engine.level_0_dim
+
+        # 确定目标 MPP 与金字塔提取层级
+        self._target_mpp = (
+            target_mpp
+            if target_mpp is not None
+            else getattr(config, "AI_MODEL_TARGET_MPP", 2.0)
+        )
+        self.target_level = self.slide_engine.get_best_level_for_mpp(self._target_mpp)
+        self.target_downsample = (
+            self.slide_engine.slide.level_downsamples[self.target_level]
+        )
+        mpp_info = self.slide_engine.get_mpp()
+        mpp_str = f"{mpp_info[0]:.4f}" if mpp_info else "未知"
+        logger.info(
+            f"[*] 目标 MPP: {self._target_mpp} μm/px | "
+            f"WSI Level-0 MPP: {mpp_str} μm/px | "
+            f"提取层级: {self.target_level} (降采样 {self.target_downsample}×)"
+        )
 
     def cancel(self):
         """中止当前的分析任务"""
@@ -135,13 +155,28 @@ class WSIAnalyzer:
         pbar = tqdm(total=len(valid_coords), desc="推理进度")
 
         # 线程池在整个推理过程中复用，避免每批次重建/销毁的开销
-        # fetch_patch 只引用 self，在循环外定义一次即可
+        # fetch_patch 在目标层级提取图块并缩放至模型输入尺寸
+        _resample = getattr(Image, "Resampling", Image).LANCZOS if hasattr(Image, "Resampling") else Image.LANCZOS
+
         def fetch_patch(coord):
             x_min, y_min = coord
+            if self.target_level == 0:
+                patch_rgba = self.slide_engine.read_region(
+                    (x_min, y_min), 0, (self.patch_size, self.patch_size)
+                )
+                return patch_rgba.convert("RGB")
+
+            # 在目标层级提取：物理覆盖区域不变，像素尺寸缩小 target_downsample 倍
+            ts = max(1, int(self.patch_size / self.target_downsample))
             patch_rgba = self.slide_engine.read_region(
-                (x_min, y_min), 0, (self.patch_size, self.patch_size)
+                (x_min, y_min), self.target_level, (ts, ts)
             )
-            return patch_rgba.convert("RGB")
+            patch_rgb = patch_rgba.convert("RGB")
+            if patch_rgb.size != (self.patch_size, self.patch_size):
+                patch_rgb = patch_rgb.resize(
+                    (self.patch_size, self.patch_size), _resample
+                )
+            return patch_rgb
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
             while i < len(valid_coords):

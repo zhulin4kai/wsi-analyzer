@@ -28,6 +28,20 @@ class SlideMetadata:
                 best = i
         return best
 
+    def get_best_level_for_mpp(self, target_mpp: float) -> int:
+        """返回 MPP 最接近 target_mpp 的金字塔层级索引（基于缓存元数据，无需打开引擎）。"""
+        if self.mpp is None or self.mpp[0] <= 0:
+            return 0
+        target_downsample = target_mpp / self.mpp[0]
+        best_level = 0
+        best_diff = float("inf")
+        for i, ds in enumerate(self.level_downsamples):
+            diff = abs(ds - target_downsample)
+            if diff < best_diff:
+                best_diff = diff
+                best_level = i
+        return best_level
+
 
 class SlidePool:
     """带引用计数的 WSIDataEngine LRU 引擎池。
