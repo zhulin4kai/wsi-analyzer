@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (
     QToolBar,
 )
 
-from gui.widgets.magnification_widget import MagnificationWidget
+from gui.widgets import MagnificationWidget
 from utils import DatabaseManager
 
 
@@ -122,7 +122,7 @@ class AnalysisToolbarMixin:
 
     def _update_profile_for_model(self, file_path: str, db: DatabaseManager):
         """根据模型体积重新计算最优 batch size 并持久化到硬件画像。"""
-        from utils.hardware_profiler import HardwareProfiler
+        from utils import HardwareProfiler
 
         drive_prefix = os.path.splitdrive(os.path.abspath(self.current_wsi_path))[0]
         profile = db.get_system_profile(drive_prefix)

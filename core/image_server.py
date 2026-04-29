@@ -5,7 +5,7 @@ from typing import Dict, List, Optional, Set, Tuple
 
 from PySide6.QtGui import QImage
 
-from core.tile_cache import TileDataCache
+from .tile_cache import TileDataCache
 
 
 @dataclass(frozen=True)

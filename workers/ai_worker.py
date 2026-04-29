@@ -2,7 +2,7 @@ from PySide6.QtCore import QThread, Signal
 
 import config
 from core import WSIAnalyzer
-from utils.db_manager import DatabaseManager
+from utils import DatabaseManager
 
 
 class AIAnalysisWorker(QThread):
@@ -42,7 +42,7 @@ class AIAnalysisWorker(QThread):
             # 解析计算设备与批大小
             import os
 
-            from utils.hardware_profiler import HardwareProfiler
+            from utils import HardwareProfiler
 
             drive_prefix = os.path.splitdrive(os.path.abspath(self.svs_path))[0]
             profile = db.get_system_profile(drive_prefix)

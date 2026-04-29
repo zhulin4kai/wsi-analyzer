@@ -4,7 +4,7 @@ from PIL import Image
 from PIL.ImageQt import ImageQt
 from PySide6.QtCore import QThread, Signal
 
-from core.image_server import ImageServer
+from core import ImageServer
 from utils import logger
 
 

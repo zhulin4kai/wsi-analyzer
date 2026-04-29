@@ -31,9 +31,9 @@ class ProfileWorker(QThread):
             return
         try:
             import config
-            from core.slide_engine import WSIDataEngine
+            from core import WSIDataEngine
             from utils import DatabaseManager
-            from utils.hardware_profiler import HardwareProfiler
+            from utils import HardwareProfiler
 
             db = DatabaseManager()
 

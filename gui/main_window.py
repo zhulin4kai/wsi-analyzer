@@ -10,18 +10,17 @@ from PySide6.QtWidgets import (
 )
 
 from config import AI_LAYER_Z_VALUE, HEATMAP_Z_VALUE, HUD_MARGIN
-from core.image_server import ImageServer
-from gui.mixins.analysis_mixin import AnalysisMixin
-from gui.mixins.file_mixin import FileHandlingMixin
+from core import ImageServer
+from gui.mixins import AnalysisMixin, FileHandlingMixin
 from gui.widgets import (
     ImageListPanel,
+    InfoBarOverlay,
     LesionGallery,
     MinimapView,
     ReportExporter,
+    ScaleBarOverlay,
     WSIView,
 )
-from gui.widgets.info_bar_overlay import InfoBarOverlay
-from gui.widgets.scale_bar_overlay import ScaleBarOverlay
 
 
 class MainWindow(AnalysisMixin, FileHandlingMixin, QMainWindow):
@@ -245,7 +244,7 @@ class MainWindow(AnalysisMixin, FileHandlingMixin, QMainWindow):
         """打开系统设置面板"""
         from PySide6.QtWidgets import QDialog
 
-        from gui.dialogs.settings_dialog import SettingsDialog
+        from gui.dialogs import SettingsDialog
 
         dlg = SettingsDialog(self, current_wsi_path=self.current_wsi_path)
         if dlg.exec() == QDialog.Accepted:

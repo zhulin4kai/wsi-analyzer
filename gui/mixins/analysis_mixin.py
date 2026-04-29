@@ -1,7 +1,7 @@
-from gui.mixins.analysis_runner_mixin import AnalysisRunnerMixin
-from gui.mixins.analysis_toolbar_mixin import AnalysisToolbarMixin
-from gui.mixins.detection_layer_mixin import DetectionLayerMixin
-from gui.mixins.heatmap_mixin import HeatmapMixin
+from .analysis_runner_mixin import AnalysisRunnerMixin
+from .analysis_toolbar_mixin import AnalysisToolbarMixin
+from .detection_layer_mixin import DetectionLayerMixin
+from .heatmap_mixin import HeatmapMixin
 
 
 class AnalysisMixin(

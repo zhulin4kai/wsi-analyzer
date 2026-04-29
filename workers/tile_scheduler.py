@@ -5,7 +5,7 @@ from PIL.ImageQt import ImageQt
 from PySide6.QtCore import QObject, QRunnable, Signal
 from PySide6.QtGui import QImage
 
-from utils.logger import logger
+from utils import logger
 
 # ---------------------------------------------------------------------------
 # 共享信号
@@ -86,7 +86,7 @@ class ScheduledTileTask:
         if self.version < self._active_version_func():
             return
 
-        from core.image_server import ImageServer
+        from core import ImageServer
 
         server = ImageServer.instance()
         engine = None
@@ -269,7 +269,7 @@ class PreloadTask(QRunnable):
         if not os.path.exists(self.path):
             return
         try:
-            from core.image_server import ImageServer
+            from core import ImageServer
 
             ImageServer.instance()._slide_pool.preload(self.path)
         except Exception as e:

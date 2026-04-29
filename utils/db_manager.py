@@ -5,8 +5,8 @@ import sqlite3
 from datetime import datetime
 
 import config
-from utils.db_schema import DDL_STATEMENTS, SETTINGS_DEFAULTS
-from utils.logger import logger
+from .db_schema import DDL_STATEMENTS, SETTINGS_DEFAULTS
+from .logger import logger
 
 # 数据库存储路径配置
 DB_DIR = getattr(config, "DB_DIR", "data")

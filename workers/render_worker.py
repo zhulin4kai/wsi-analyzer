@@ -1,7 +1,7 @@
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtGui import QImage
 
-from workers.tile_scheduler import PriorityTileScheduler, TileSchedulerSignals
+from .tile_scheduler import PriorityTileScheduler, TileSchedulerSignals
 
 
 class RenderWorker(QObject):

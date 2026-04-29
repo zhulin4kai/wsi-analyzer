@@ -2,7 +2,7 @@ import os
 
 from PySide6.QtWidgets import QFileDialog, QMessageBox
 
-from core.image_server import ImageServer
+from core import ImageServer
 from utils import DatabaseManager
 
 
@@ -104,7 +104,7 @@ class FileHandlingMixin:
                 pass
             self._profile_worker.cancel()
 
-        from workers.profile_worker import ProfileWorker
+        from workers import ProfileWorker
 
         self._profile_worker = ProfileWorker(file_path, drive_prefix, existing_profile)
         self._profile_worker.profile_ready.connect(self._on_profile_ready)

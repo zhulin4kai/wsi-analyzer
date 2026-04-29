@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from workers.gallery_worker import GalleryWorker
+from workers import GalleryWorker
 
 
 class GalleryItemWidget(QWidget):

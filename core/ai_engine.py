@@ -5,11 +5,11 @@ import numpy as np
 from tqdm import tqdm
 
 import config
-from core.image_server import ImageServer
-from core.model_adapters import ModelAdapterFactory
-from core.roi_manager import generate_roi_coordinates
+from .image_server import ImageServer
+from .model_adapters import ModelAdapterFactory
+from .roi_manager import generate_roi_coordinates
 from utils import logger
-from utils.nms import nms_numpy
+from utils import nms_numpy
 
 
 class WSIAnalyzer:

@@ -1,6 +1,6 @@
 import numpy as np
 
-from utils.nms import nms_numpy
+from utils import nms_numpy
 
 
 def generate_roi_coordinates(

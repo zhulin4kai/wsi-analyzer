@@ -93,7 +93,7 @@ class InfoBarOverlay(QWidget):
         if not self._path:
             return
         try:
-            from core.image_server import ImageServer
+            from core import ImageServer
 
             w, h = self._level_0_dim
             lx, ly = self._pending_lx, self._pending_ly

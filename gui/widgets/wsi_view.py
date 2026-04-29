@@ -11,9 +11,9 @@ from PySide6.QtWidgets import (
 )
 
 from config import IDLE_THRESHOLD_MS, RENDER_DEBOUNCE_MS
-from core.image_server import ImageServer, SlideMetadata
-from core.tile_cache import TileLRUCache
-from utils.logger import logger
+from core import ImageServer, SlideMetadata
+from core import TileLRUCache
+from utils import logger
 from workers import RenderWorker
 
 from .roi_box_item import ROIBoxItem

@@ -17,7 +17,7 @@ class ThumbnailWorker(QThread):
     def run(self):
         from PIL import Image
 
-        from core.image_server import ImageServer
+        from core import ImageServer
 
         resample = getattr(Image, "Resampling", Image).LANCZOS
 
