@@ -60,7 +60,7 @@ class ImageListPanel(QDockWidget):
         layout.setSpacing(4)
 
         # 添加图像按钮
-        self.btn_add = QPushButton("添加图像...")
+        self.btn_add = QPushButton("添加图像")
         self.btn_add.clicked.connect(self.add_requested)
         layout.addWidget(self.btn_add)
 
@@ -76,7 +76,7 @@ class ImageListPanel(QDockWidget):
 
         # 搜索栏
         self.search_bar = QLineEdit()
-        self.search_bar.setPlaceholderText("搜索图像...")
+        self.search_bar.setPlaceholderText("搜索图像")
         self.search_bar.textChanged.connect(self._on_search_changed)
         layout.addWidget(self.search_bar)
 

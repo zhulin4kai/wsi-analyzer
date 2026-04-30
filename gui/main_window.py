@@ -1,5 +1,7 @@
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor
+import os
+
+from PySide6.QtCore import Qt, QUrl
+from PySide6.QtGui import QColor, QDragEnterEvent, QDropEvent
 from PySide6.QtWidgets import (
     QGraphicsDropShadowEffect,
     QGraphicsItemGroup,
@@ -30,6 +32,7 @@ class MainWindow(AnalysisMixin, FileHandlingMixin, QMainWindow):
         super().__init__()
         self.setWindowTitle("智能 WSI 病理切片辅助诊断系统 - WSIAnalyzer")
         self.resize(1440, 900)
+        self.setAcceptDrops(True)
 
         # 状态记录
         self.current_wsi_path = None
@@ -72,11 +75,11 @@ class MainWindow(AnalysisMixin, FileHandlingMixin, QMainWindow):
         # ── 文件 ──────────────────────────────────────────────────────────────
         file_menu = menubar.addMenu("文件")
 
-        open_action = file_menu.addAction("打开 WSI 文件...")
+        open_action = file_menu.addAction("打开 WSI 文件")
         open_action.setShortcut("Ctrl+O")
         open_action.triggered.connect(self.open_file)
 
-        add_action = file_menu.addAction("添加图像到列表...")
+        add_action = file_menu.addAction("添加图像到列表")
         add_action.triggered.connect(self.add_images_to_list)
 
         file_menu.addSeparator()
@@ -94,7 +97,7 @@ class MainWindow(AnalysisMixin, FileHandlingMixin, QMainWindow):
 
         file_menu.addSeparator()
 
-        self.settings_action = file_menu.addAction("系统设置...")
+        self.settings_action = file_menu.addAction("系统设置")
         self.settings_action.triggered.connect(self.open_settings)
 
         file_menu.addSeparator()
@@ -176,7 +179,7 @@ class MainWindow(AnalysisMixin, FileHandlingMixin, QMainWindow):
 
         analyze_menu.addSeparator()
 
-        model_action = analyze_menu.addAction("选择模型权重...")
+        model_action = analyze_menu.addAction("选择模型权重")
         model_action.triggered.connect(self.select_model)
 
         analyze_menu.addSeparator()
@@ -375,3 +378,49 @@ class MainWindow(AnalysisMixin, FileHandlingMixin, QMainWindow):
             self.viewer._render_high_res_viewport()
         if hasattr(self.viewer, "_trigger_view_update"):
             self.viewer._trigger_view_update()
+
+    # ==================== Drag and Drop ====================
+
+    _WSI_EXTENSIONS = {".svs", ".tif", ".ndpi", ".ome.tif"}
+
+    def _extract_wsi_paths(self, event) -> list:
+        """从拖拽事件中提取有效的 WSI 文件路径列表。"""
+        urls = event.mimeData().urls() if event.mimeData().hasUrls() else []
+        paths = []
+        for url in urls:
+            if url.isLocalFile():
+                path = url.toLocalFile()
+                full_lower = path.lower()
+                if any(
+                    full_lower.endswith(e) for e in self._WSI_EXTENSIONS
+                ) and os.path.exists(path):
+                    paths.append(path)
+        return paths
+
+    def dragEnterEvent(self, event: QDragEnterEvent):
+        paths = self._extract_wsi_paths(event)
+        if paths:
+            event.acceptProposedAction()
+            self.viewer.set_drag_overlay(True)
+        else:
+            event.ignore()
+
+    def dragMoveEvent(self, event):
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+
+    def dragLeaveEvent(self, event):
+        self.viewer.set_drag_overlay(False)
+
+    def dropEvent(self, event: QDropEvent):
+        self.viewer.set_drag_overlay(False)
+        paths = self._extract_wsi_paths(event)
+        if not paths:
+            return
+
+        event.acceptProposedAction()
+        # 批量添加并加载第一个
+        if hasattr(self, "image_list_panel"):
+            self.image_list_panel.add_images(paths)
+        if paths:
+            self._load_wsi_at_path(paths[0])

@@ -2,10 +2,12 @@ import math
 
 from PIL.ImageQt import ImageQt
 from PySide6.QtCore import QRectF, Qt, QTimer, Signal
-from PySide6.QtGui import QPainter, QPixmap
+from PySide6.QtGui import QBrush, QColor, QDragEnterEvent, QDragMoveEvent, QDropEvent, QFont, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
     QGraphicsPixmapItem,
+    QGraphicsRectItem,
     QGraphicsScene,
+    QGraphicsSimpleTextItem,
     QGraphicsView,
     QMessageBox,
 )
@@ -48,9 +50,27 @@ class WSIView(QGraphicsView):
         self.bg_layer_item.setZValue(-1)
         self.scene_canvas.addItem(self.bg_layer_item)
 
-        # 场景项 LRU 缓存；每次切换切片时清空
-        self.tile_cache = TileLRUCache(max_capacity=500)
+        # 无切片时的占位提示文字
+        self._placeholder = QGraphicsSimpleTextItem(
+            "拖拽 .svs / .tif / .ndpi 切片到此处，或通过左侧 添加图像 加载"
+        )
+        self._placeholder.setFont(QFont("Microsoft YaHei", 13))
+        self._placeholder.setBrush(QBrush(QColor(140, 140, 140)))
+        self._placeholder.setZValue(10000)
+        self.scene_canvas.addItem(self._placeholder)
 
+        # 拖拽悬停时的半透明灰色遮罩
+        self._drop_overlay = QGraphicsRectItem()
+        self._drop_overlay.setBrush(QBrush(QColor(80, 80, 80, 60)))
+        self._drop_overlay.setPen(QPen(Qt.NoPen))
+        self._drop_overlay.setZValue(9999)
+        self._drop_overlay.setVisible(False)
+        self.scene_canvas.addItem(self._drop_overlay)
+
+        # 场景项 LRU 缓存；每次切换切片时清空
+        self.tile_cache = TileLRUCache(max_capacity=1024)
+
+        self.setAcceptDrops(True)
         self.setRenderHint(QPainter.Antialiasing)
         self.setRenderHint(QPainter.SmoothPixmapTransform)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
@@ -90,15 +110,11 @@ class WSIView(QGraphicsView):
         self.idle_timer.setInterval(IDLE_THRESHOLD_MS)
         self.idle_timer.timeout.connect(self._on_absolute_idle)
 
-    # ==================== Interaction state ====================
-
     def _mark_interaction(self):
         self.idle_timer.start()
         if not self._is_interaction:
             self._is_interaction = True
             self.interaction_started.emit()
-
-    # ==================== Render pipeline ====================
 
     def _request_high_res_render(self):
         """Compute visible tile grid and route each tile through three cache levels."""
@@ -242,6 +258,10 @@ class WSIView(QGraphicsView):
             self.render_worker.shutdown()
         super().closeEvent(event)
 
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._update_placeholder_visibility()
+
     def load_wsi(self, file_path):
         """Switch to a new slide. Engine lifecycle is fully delegated to ImageServer.SlidePool."""
         # Stop pending tasks; a large version jump marks in-flight tasks as stale
@@ -253,6 +273,7 @@ class WSIView(QGraphicsView):
         # Nullify state so any late _on_image_ready calls are silently discarded
         self._current_path = None
         self._metadata = None
+        self._update_placeholder_visibility()
 
         try:
             metadata = ImageServer.instance().get_metadata(file_path)
@@ -288,6 +309,7 @@ class WSIView(QGraphicsView):
         # 所有准备工作完成后才激活新的切片状态
         self._current_path = file_path
         self._metadata = metadata
+        self._update_placeholder_visibility()
 
         self.zoom_changed.emit(self.transform().m11())
         self._render_high_res_viewport()
@@ -402,8 +424,6 @@ class WSIView(QGraphicsView):
 
         self._request_high_res_render()
 
-    # ==================== View control ====================
-
     def set_scale(self, target_scale: float):
         """Set absolute zoom scale (m11 value), anchored to viewport centre."""
         if not self._current_path:
@@ -452,3 +472,50 @@ class WSIView(QGraphicsView):
         self.zoom_changed.emit(self.transform().m11())
         self.render_timer.start()
         self.view_rect_changed.emit(self.get_visible_rect())
+
+    # ── Drag and Drop ──────────────────────────────────────────────────────
+    #
+    # QGraphicsView 内部会在 event() 层拦截 DragEnter/DragMove/Drop 事件
+    # 并分发给 QGraphicsScene，不论 acceptDrops 是否为 True，导致事件无法冒泡到
+    # 父窗口 MainWindow。因此必须在 WSIView 层显式覆盖四个拖拽事件，转发给 parent
+    # 以触发 MainWindow 的遮罩渲染与文件打开逻辑。
+
+    def dragEnterEvent(self, event: QDragEnterEvent):
+        if self.parent():
+            self.parent().dragEnterEvent(event)
+
+    def dragMoveEvent(self, event: QDragMoveEvent):
+        if self.parent():
+            self.parent().dragMoveEvent(event)
+
+    def dragLeaveEvent(self, event):
+        if self.parent():
+            self.parent().dragLeaveEvent(event)
+
+    def dropEvent(self, event: QDropEvent):
+        if self.parent():
+            self.parent().dropEvent(event)
+
+    def set_drag_overlay(self, visible: bool):
+        """显示/隐藏拖拽悬停遮罩并调整占位文字样式。"""
+        self._drop_overlay.setVisible(visible)
+        if visible:
+            self._placeholder.setBrush(QBrush(QColor(180, 180, 180)))
+            # 遮罩覆盖整个 viewport
+            vr = self.viewport().rect()
+            tl = self.mapToScene(vr.topLeft())
+            br = self.mapToScene(vr.bottomRight())
+            self._drop_overlay.setRect(QRectF(tl, br))
+        else:
+            self._placeholder.setBrush(QBrush(QColor(140, 140, 140)))
+
+    def _update_placeholder_visibility(self):
+        """根据当前切片状态控制占位文字显示。"""
+        self._placeholder.setVisible(self._current_path is None)
+        if not self._current_path:
+            vr = self.viewport().rect()
+            tr = self.mapToScene(vr).boundingRect()
+            self._placeholder.setPos(
+                tr.center().x() - self._placeholder.boundingRect().width() / 2,
+                tr.center().y(),
+            )
