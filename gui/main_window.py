@@ -1,7 +1,7 @@
 import os
 
 from PySide6.QtCore import Qt, QUrl
-from PySide6.QtGui import QColor, QDragEnterEvent, QDropEvent
+from PySide6.QtGui import QActionGroup, QColor, QDragEnterEvent, QDropEvent, QAction
 from PySide6.QtWidgets import (
     QGraphicsDropShadowEffect,
     QGraphicsItemGroup,
@@ -131,11 +131,35 @@ class MainWindow(AnalysisMixin, FileHandlingMixin, QMainWindow):
         panel_menu.addAction(self.image_list_panel.toggleViewAction())
         panel_menu.addAction(self.gallery.toggleViewAction())
 
-        # 鹰眼图不是 QDockWidget，手动创建 checkable action
-        minimap_action = panel_menu.addAction("鹰眼图")
-        minimap_action.setCheckable(True)
-        minimap_action.setChecked(self.minimap.isVisible())
-        minimap_action.toggled.connect(self.minimap.setVisible)
+        # 鹰眼图不是 QDockWidget，手动创建子菜单（显示/隐藏 + 尺寸档位）
+        minimap_menu = panel_menu.addMenu("鹰眼图")
+
+        show_action = minimap_menu.addAction("显示鹰眼图")
+        show_action.setCheckable(True)
+        show_action.setChecked(self.minimap.isVisible())
+        show_action.toggled.connect(self.minimap.setVisible)
+
+        minimap_menu.addSeparator()
+
+        size_menu = minimap_menu.addMenu("大小")
+        self._minimap_size_group = QActionGroup(self)
+        self._minimap_size_group.setExclusive(True)
+        _SIZE_PRESETS = [
+            (0.50, "小 50%"),
+            (0.75, "中 75%"),
+            (1.00, "大 100%"),
+            (1.50, "特大 150%"),
+        ]
+        for scale, label in _SIZE_PRESETS:
+            action = QAction(label, self._minimap_size_group)
+            action.setCheckable(True)
+            action.setChecked(scale == 1.0)
+            action.triggered.connect(
+                lambda checked, s=scale: self.minimap.set_size_scale(s)
+            )
+            size_menu.addAction(action)
+
+        self.minimap.size_scale_changed.connect(self._on_minimap_size_changed)
 
         view_menu.addSeparator()
 
@@ -338,6 +362,19 @@ class MainWindow(AnalysisMixin, FileHandlingMixin, QMainWindow):
         """鹰眼图拖拽时的轻量导航，仅移动视图不触发高清渲染"""
         self.viewer.centerOn(cx, cy)
         self.viewer._trigger_view_update()
+
+    def _on_minimap_size_changed(self, scale: float):
+        """鹰眼图右键菜单切档时同步菜单栏勾选状态。"""
+        if hasattr(self, "_minimap_size_group"):
+            for action in self._minimap_size_group.actions():
+                # 从 label 中解析出 scale 值；label 形如 "大 100%"
+                parts = action.text().split()
+                if len(parts) >= 2:
+                    try:
+                        pct = float(parts[-1].rstrip("%"))
+                        action.setChecked(abs(pct / 100.0 - scale) < 1e-6)
+                    except ValueError:
+                        pass
 
     def export_report(self, fmt="csv"):
         """生成并导出结构化报告"""
