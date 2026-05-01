@@ -151,3 +151,62 @@ class ReportExporter:
             )
         except Exception as e:
             QMessageBox.critical(parent, "导出失败", f"写入文件时发生错误:\n{e}")
+
+    @staticmethod
+    def import_geojson(file_path: str) -> list:
+        """
+        从 GeoJSON 文件导入标注，返回统一的结果列表。
+        支持的 geometry 类型：Polygon → 取外环 bounding box；
+                             MultiPolygon → 拆分为多个 bounding box。
+
+        :return: [{"bbox": [x1,y1,x2,y2], "confidence": float, "class_id": str, "source": "imported"}, ...]
+        """
+        with open(file_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        features = data.get("features", [])
+        if not features:
+            return []
+
+        results = []
+        for feat in features:
+            geom = feat.get("geometry", {})
+            props = feat.get("properties", {})
+
+            # 提取 class_id
+            classification = props.get("classification", {})
+            class_id = classification.get("name", "annotation")
+
+            # 提取置信度：外部标注默认 1.0（人工确认），本项目导出则携带实际值
+            confidence = 1.0
+            for m in props.get("measurements", []):
+                if m.get("name") == "Confidence":
+                    confidence = float(m.get("value", 1.0))
+                    break
+
+            if geom.get("type") == "Polygon":
+                coords = geom.get("coordinates", [[]])[0]
+                if coords:
+                    xs = [p[0] for p in coords]
+                    ys = [p[1] for p in coords]
+                    results.append({
+                        "bbox": [min(xs), min(ys), max(xs), max(ys)],
+                        "confidence": confidence,
+                        "class_id": class_id,
+                        "source": "imported",
+                    })
+
+            elif geom.get("type") == "MultiPolygon":
+                for polygon in geom.get("coordinates", []):
+                    coords = polygon[0] if polygon else []
+                    if coords:
+                        xs = [p[0] for p in coords]
+                        ys = [p[1] for p in coords]
+                        results.append({
+                            "bbox": [min(xs), min(ys), max(xs), max(ys)],
+                            "confidence": confidence,
+                            "class_id": class_id,
+                            "source": "imported",
+                        })
+
+        return results

@@ -39,6 +39,7 @@ class MainWindow(AnalysisMixin, FileHandlingMixin, QMainWindow):
         self.current_model_path = None
         self._was_ai_visible = True
         self.current_ai_results = []
+        self.current_imported_annotations = []
 
         # 1. 初始化中心视图 WSIView
         self.viewer = WSIView(self)
@@ -53,6 +54,11 @@ class MainWindow(AnalysisMixin, FileHandlingMixin, QMainWindow):
         self.ai_layer_group = QGraphicsItemGroup()
         self.ai_layer_group.setZValue(AI_LAYER_Z_VALUE)
         self.viewer.scene_canvas.addItem(self.ai_layer_group)
+
+        # 导入标注图层：Z 值略高于 AI 预测框，位于热力图与 ROI 框之间
+        self.imported_layer_group = QGraphicsItemGroup()
+        self.imported_layer_group.setZValue(AI_LAYER_Z_VALUE + 10)
+        self.viewer.scene_canvas.addItem(self.imported_layer_group)
 
         # 3. 初始化所有 UI 面板（_init_menu 必须最后调用，依赖其他面板已创建）
         self._init_ai_ui()
@@ -94,6 +100,11 @@ class MainWindow(AnalysisMixin, FileHandlingMixin, QMainWindow):
         export_menu.addAction("导出为 GeoJSON (QuPath)").triggered.connect(
             lambda: self.export_report("geojson")
         )
+
+        file_menu.addSeparator()
+
+        import_annotation_action = file_menu.addAction("导入标注 (GeoJSON)")
+        import_annotation_action.triggered.connect(self.import_annotations)
 
         file_menu.addSeparator()
 

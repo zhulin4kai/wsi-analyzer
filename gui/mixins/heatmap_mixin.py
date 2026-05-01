@@ -16,6 +16,7 @@ from config import (
     HEATMAP_LOD_MID_THRESH,
     HEATMAP_MINI_BLUR_SIGMA,
 )
+from utils import DatabaseManager
 
 
 class HeatmapMixin:
@@ -60,7 +61,16 @@ class HeatmapMixin:
         if not hasattr(self, "heatmap_layer_item"):
             return
 
-        if not self.current_ai_results:
+        db = DatabaseManager()
+        show_imported = (
+            db.get_setting("show_imported_heatmap", "True") == "True"
+        )
+
+        results = list(self.current_ai_results)
+        if show_imported and hasattr(self, "current_imported_annotations"):
+            results.extend(self.current_imported_annotations)
+
+        if not results:
             self._clear_heatmap()
             return
 
@@ -68,10 +78,11 @@ class HeatmapMixin:
             return
 
         wsi_w, wsi_h = self.viewer._metadata.level_0_dim
-        grid = self._compute_heatmap(self.current_ai_results, wsi_w, wsi_h)
+        grid = self._compute_heatmap(results, wsi_w, wsi_h)
         qimage, rgba = self._grid_to_qimage(grid)
 
         pixmap = QPixmap.fromImage(qimage)
+        self.heatmap_layer_item.prepareGeometryChange()
         self.heatmap_layer_item.setPixmap(pixmap)
         self.heatmap_layer_item.setPos(0.0, 0.0)
         self.heatmap_layer_item.setScale(float(HEATMAP_BIN_SIZE))
@@ -80,6 +91,9 @@ class HeatmapMixin:
         self._on_zoom_changed_lod(self.viewer.transform().m11())
 
         self._update_minimap_heatmap(rgba)
+
+        # 显式触发 viewport 重绘，确保 Scale 变换后的 pixmap 正确刷新
+        self.viewer.viewport().update()
 
     def _clear_heatmap(self):
         if hasattr(self, "heatmap_layer_item"):

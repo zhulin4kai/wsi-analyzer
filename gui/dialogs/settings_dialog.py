@@ -175,6 +175,11 @@ class SettingsDialog(QDialog):
             )
         )
 
+        self.chk_imported_heatmap = QCheckBox("导入标注参与热力图")
+        self.chk_imported_heatmap.setChecked(
+            self._db.get_setting("show_imported_heatmap", "True") == "True"
+        )
+
         layout.addRow("", self.chk_auto_tune)
         layout.addRow("模型架构 (Architecture):", self.combo_model_type)
         layout.addRow("模型训练倍率:", self.combo_mag)
@@ -183,6 +188,7 @@ class SettingsDialog(QDialog):
         layout.addRow("滑动步长 (Stride):", self.spin_stride)
         layout.addRow("NMS IOU 阈值:", self.spin_iou)
         layout.addRow("置信度阈值 (Conf):", self.spin_conf)
+        layout.addRow("", self.chk_imported_heatmap)
 
         self.chk_auto_tune.clicked.connect(self._toggle_ai_inputs)
         self.combo_model_type.currentTextChanged.connect(self._toggle_ai_inputs)
@@ -258,3 +264,6 @@ class SettingsDialog(QDialog):
         self._db.set_setting("ai_model_type", self.combo_model_type.currentText())
         self._db.set_setting("ai_model_target_mpp", str(self.spin_mpp.value()))
         self._db.set_auto_tune_enabled(self.chk_auto_tune.isChecked())
+        self._db.set_setting(
+            "show_imported_heatmap", str(self.chk_imported_heatmap.isChecked())
+        )

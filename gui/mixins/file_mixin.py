@@ -53,6 +53,9 @@ class FileHandlingMixin:
             self.ai_layer_group.removeFromGroup(item)
             self.viewer.scene_canvas.removeItem(item)
         self.current_ai_results = []
+        self.current_imported_annotations = []
+        if hasattr(self, "_clear_imported_layer"):
+            self._clear_imported_layer()
         if hasattr(self, "_clear_heatmap"):
             self._clear_heatmap()
         if hasattr(self, "btn_export"):
