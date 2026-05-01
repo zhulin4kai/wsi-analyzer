@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
 )
 
 import config
-from utils import DatabaseManager
+from utils import DatabaseManager, HardwareProfiler
 
 
 def _mpp_to_label(mpp: float, options: dict) -> str:
@@ -72,9 +72,9 @@ class SettingsDialog(QDialog):
         layout = QFormLayout(tab)
 
         if self.current_wsi_path:
-            self._drive_prefix = os.path.splitdrive(
-                os.path.abspath(self.current_wsi_path)
-            )[0]
+            self._drive_prefix = HardwareProfiler.get_storage_key(
+                self.current_wsi_path
+            )
 
         self._profile = (
             self._db.get_system_profile(self._drive_prefix)

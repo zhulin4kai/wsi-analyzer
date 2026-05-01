@@ -124,7 +124,7 @@ class AnalysisToolbarMixin:
         """根据模型体积重新计算最优 batch size 并持久化到硬件画像。"""
         from utils import HardwareProfiler
 
-        drive_prefix = os.path.splitdrive(os.path.abspath(self.current_wsi_path))[0]
+        drive_prefix = HardwareProfiler.get_storage_key(self.current_wsi_path)
         profile = db.get_system_profile(drive_prefix)
 
         if not (profile and "io_speed" in profile):

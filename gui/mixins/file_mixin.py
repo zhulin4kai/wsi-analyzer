@@ -3,7 +3,7 @@ import os
 from PySide6.QtWidgets import QFileDialog, QMessageBox
 
 from core import ImageServer
-from utils import DatabaseManager
+from utils import DatabaseManager, HardwareProfiler
 
 
 class FileHandlingMixin:
@@ -94,7 +94,7 @@ class FileHandlingMixin:
                     f"已从本地数据库加载 {len(results)} 个病灶。"
                 )
 
-        drive_prefix = os.path.splitdrive(os.path.abspath(file_path))[0]
+        drive_prefix = HardwareProfiler.get_storage_key(file_path)
         existing_profile = db.get_system_profile(drive_prefix)
 
         if hasattr(self, "_profile_worker") and self._profile_worker.isRunning():

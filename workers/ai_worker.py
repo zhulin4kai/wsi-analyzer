@@ -49,7 +49,7 @@ class AIAnalysisWorker(QThread):
 
             from utils import HardwareProfiler
 
-            drive_prefix = os.path.splitdrive(os.path.abspath(self.svs_path))[0]
+            drive_prefix = HardwareProfiler.get_storage_key(self.svs_path)
             profile = db.get_system_profile(drive_prefix)
 
             if profile:

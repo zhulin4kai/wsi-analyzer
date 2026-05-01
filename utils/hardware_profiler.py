@@ -1,4 +1,6 @@
+import os
 import subprocess
+import sys
 import time
 
 import psutil
@@ -8,6 +10,22 @@ from utils import logger
 
 
 class HardwareProfiler:
+
+    @staticmethod
+    def get_storage_key(file_path: str) -> str:
+        """返回用于硬件画像的存储标识键。
+
+        Windows：驱动器盘符（如 C:）
+        Linux/macOS：文件所在挂载点路径
+        """
+        abs_path = os.path.abspath(file_path)
+        if sys.platform == "win32":
+            return os.path.splitdrive(abs_path)[0] or "C:"
+        # POSIX: 使用文件所在目录前两级作为近似键（通常可区分不同挂载点）
+        parts = abs_path.strip("/").split("/")
+        if len(parts) >= 2:
+            return "/" + "/".join(parts[:2])
+        return "/"
     @staticmethod
     def get_compute_device() -> str:
         """

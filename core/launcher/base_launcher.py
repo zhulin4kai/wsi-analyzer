@@ -75,6 +75,13 @@ class AppLauncher:
         """
         执行完整的启动序列。
         """
+        # 0. 强制使用 spawn 方式启动子进程，避免 Linux/macOS 默认 fork
+        #    因 PySide6/Qt 在 fork 后会导致段错误
+        try:
+            multiprocessing.set_start_method("spawn", force=True)
+        except RuntimeError:
+            pass  # 已在其他地方设置过
+
         # 1. 瞬间构建并显示可视化的启动UI
         self.splash = SplashUI(self.image_path, self.width, self.height)
 

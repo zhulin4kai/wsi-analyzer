@@ -1,5 +1,5 @@
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QBrush, QColor, QFont, QPainter, QPen
+from PySide6.QtGui import QBrush, QColor, QFont, QFontDatabase, QPainter, QPen
 from PySide6.QtWidgets import QWidget
 
 from config import (
@@ -51,6 +51,12 @@ class InfoBarOverlay(QWidget):
 
         self.setFixedSize(self.WIDGET_W, self.WIDGET_H)
         self.setVisible(False)
+
+        # 跨平台等宽字体（QFontDatabase 自动匹配系统默认等宽字体）
+        self._mono_font_9 = QFontDatabase.systemFont(QFontDatabase.FixedFont)
+        self._mono_font_9.setPointSize(9)
+        self._mono_font_8 = QFontDatabase.systemFont(QFontDatabase.FixedFont)
+        self._mono_font_8.setPointSize(8)
 
     # ── 公共 API ─────────────────────────────────────────────────────────
 
@@ -125,7 +131,7 @@ class InfoBarOverlay(QWidget):
 
         # ── 坐标文字（上方，右侧留色块位置）──
         p.setPen(_FG_COLOR)
-        p.setFont(QFont("Consolas", 9))
+        p.setFont(self._mono_font_9)
         text_w = w - 2 * pad - swatch - 8
         p.drawText(pad, 2, text_w, 22, Qt.AlignLeft | Qt.AlignVCenter, self._coord_text)
 
@@ -139,7 +145,7 @@ class InfoBarOverlay(QWidget):
 
         # ── RGB 文字（下方）──
         if self._rgb_text:
-            p.setFont(QFont("Consolas", 8))
+            p.setFont(self._mono_font_8)
             p.setPen(_DIM_COLOR)
             p.drawText(
                 pad, 28, w - 2 * pad, 20, Qt.AlignLeft | Qt.AlignVCenter, self._rgb_text

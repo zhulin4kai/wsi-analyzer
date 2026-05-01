@@ -121,7 +121,7 @@ class SplashUI:
                 self.height / 2,
                 text="WSIAnalyzer\nLoading...",
                 fill="white",
-                font=("Arial", 24),
+                font=("TkDefaultFont", 24, "bold"),
                 justify="center",
             )
 
@@ -133,7 +133,7 @@ class SplashUI:
             text="Initializing...",
             fill="white",  # 默认白色文本（适合深色启动背景）
             anchor="w",
-            font=("Arial", 10),
+            font=("TkDefaultFont", 10),
         )
 
     def update_text(self, message: str):

@@ -50,11 +50,13 @@ class WSIView(QGraphicsView):
         self.bg_layer_item.setZValue(-1)
         self.scene_canvas.addItem(self.bg_layer_item)
 
-        # 无切片时的占位提示文字
+        # 无切片时的占位提示文字（使用系统默认字体，跨平台兼容）
+        font = QFont()
+        font.setPointSize(13)
         self._placeholder = QGraphicsSimpleTextItem(
-            "拖拽 .svs / .tif / .ndpi 切片到此处，或通过左侧 添加图像 加载"
+            "拖拽 .svs / .tif / .ndpi 切片到此处，或通过 文件 → 打开 加载"
         )
-        self._placeholder.setFont(QFont("Microsoft YaHei", 13))
+        self._placeholder.setFont(font)
         self._placeholder.setBrush(QBrush(QColor(140, 140, 140)))
         self._placeholder.setZValue(10000)
         self.scene_canvas.addItem(self._placeholder)

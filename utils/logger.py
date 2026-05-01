@@ -5,9 +5,20 @@ from logging.handlers import RotatingFileHandler
 
 
 def _get_log_dir() -> str:
-    """返回日志目录的绝对路径。打包后指向 exe 同级目录，开发时指向项目根目录。"""
+    """返回日志目录的绝对路径。
+
+    打包模式：Windows → %LOCALAPPDATA%/WSIAnalyzer/logs
+              Linux/macOS → ~/.local/state/WSIAnalyzer/logs
+    开发模式：项目根目录下的 logs/
+    """
     if getattr(sys, "frozen", False):
-        base = os.path.dirname(sys.executable)
+        if sys.platform == "win32":
+            base = os.environ.get("LOCALAPPDATA", os.path.expanduser("~"))
+        else:
+            base = os.environ.get(
+                "XDG_STATE_HOME", os.path.join(os.path.expanduser("~"), ".local", "state")
+            )
+        base = os.path.join(base, "WSIAnalyzer")
     else:
         base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     return os.path.join(base, "logs")

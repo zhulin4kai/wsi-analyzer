@@ -61,6 +61,12 @@ class ScaleBarOverlay(QWidget):
         self.setFixedSize(self.WIDGET_W, self.WIDGET_H)
         self.setVisible(False)
 
+        # 跨平台默认字体
+        self._font_9 = QFont()
+        self._font_9.setPointSize(9)
+        self._font_8 = QFont()
+        self._font_8.setPointSize(8)
+
     # ── 公共 API ─────────────────────────────────────────────────────────
 
     def load(self, mpp_x, mpp_y):
@@ -142,14 +148,14 @@ class ScaleBarOverlay(QWidget):
             p.drawLine(pad + self._bar_px, tick_top, pad + self._bar_px, tick_bot)
 
             # 比例尺标签（居中在线下方）
-            p.setFont(QFont("Arial", 9))
+            p.setFont(self._font_9)
             p.setPen(_DIM_COLOR)
             p.drawText(
                 pad, bar_y + 5, self._bar_px, 16, Qt.AlignCenter, self._bar_label
             )
         else:
             # 无 MPP 元数据时提示
-            p.setFont(QFont("Arial", 8))
+            p.setFont(self._font_8)
             p.setPen(_DIM_COLOR)
             p.drawText(
                 pad, 8, w - 2 * pad, 20, Qt.AlignLeft | Qt.AlignVCenter, "无标定信息"
