@@ -37,8 +37,7 @@ class DetectionLayerMixin:
             self._update_heatmap_layer()
 
         if self.current_wsi_path:
-            db = DatabaseManager()
-            db.save_analysis(
+            DatabaseManager().analysis.save_analysis(
                 file_path=self.current_wsi_path,
                 model_path=self.current_model_path or "",
                 status=status,

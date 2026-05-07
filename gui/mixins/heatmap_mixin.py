@@ -61,10 +61,7 @@ class HeatmapMixin:
         if not hasattr(self, "heatmap_layer_item"):
             return
 
-        db = DatabaseManager()
-        show_imported = (
-            db.get_setting("show_imported_heatmap", "True") == "True"
-        )
+        show_imported = DatabaseManager().settings.get_setting("show_imported_heatmap", True)
 
         results = list(self.current_ai_results)
         if show_imported and hasattr(self, "current_imported_annotations"):

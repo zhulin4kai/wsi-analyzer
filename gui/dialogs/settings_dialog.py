@@ -177,7 +177,7 @@ class SettingsDialog(QDialog):
 
         self.chk_imported_heatmap = QCheckBox("导入标注参与热力图")
         self.chk_imported_heatmap.setChecked(
-            self._db.get_setting("show_imported_heatmap", "True") == "True"
+            self._db.get_setting("show_imported_heatmap", True)
         )
 
         layout.addRow("", self.chk_auto_tune)
