@@ -4,7 +4,7 @@ assets/*
 .idea
 .wsi_cache/
 current_wsi_analysis.json
-logs/*.log
+logs
 docs
 *.pyc
 __pycache__/
@@ -39,3 +39,8 @@ build
 /data/wsi_data.db-wal
 assets/
 data
+graphify-out
+thesis
+.opencode
+.deepseek
+AGENTS.md

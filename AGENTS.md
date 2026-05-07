@@ -1,32 +1,68 @@
 # AGENTS.md — WSIAnalyzer
 
-## Run & build
+Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-specific instructions as needed.
 
-```bash
-python main.py              # run the app
-python export_onnx.py       # convert .pt → .onnx (one-off, before packaging)
-pyinstaller WSIAnalyzer.spec   # build distributable
+**Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
+
+## 1. Think Before Coding
+
+**Don't assume. Don't hide confusion. Surface tradeoffs.**
+
+Before implementing:
+- State your assumptions explicitly. If uncertain, ask.
+- If multiple interpretations exist, present them - don't pick silently.
+- If a simpler approach exists, say so. Push back when warranted.
+- If something is unclear, stop. Name what's confusing. Ask.
+
+## 2. Simplicity First
+
+**Minimum code that solves the problem. Nothing speculative.**
+
+- No features beyond what was asked.
+- No abstractions for single-use code.
+- No "flexibility" or "configurability" that wasn't requested.
+- No error handling for impossible scenarios.
+- If you write 200 lines and it could be 50, rewrite it.
+
+Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
+
+## 3. Surgical Changes
+
+**Touch only what you must. Clean up only your own mess.**
+
+When editing existing code:
+- Don't "improve" adjacent code, comments, or formatting.
+- Don't refactor things that aren't broken.
+- Match existing style, even if you'd do it differently.
+- If you notice unrelated dead code, mention it - don't delete it.
+
+When your changes create orphans:
+- Remove imports/variables/functions that YOUR changes made unused.
+- Don't remove pre-existing dead code unless asked.
+
+The test: Every changed line should trace directly to the user's request.
+
+## 4. Goal-Driven Execution
+
+**Define success criteria. Loop until verified.**
+
+Transform tasks into verifiable goals:
+- "Add validation" → "Write tests for invalid inputs, then make them pass"
+- "Fix the bug" → "Write a test that reproduces it, then make it pass"
+- "Refactor X" → "Ensure tests pass before and after"
+
+For multi-step tasks, state a brief plan:
+```
+1. [Step] → verify: [check]
+2. [Step] → verify: [check]
+3. [Step] → verify: [check]
 ```
 
-There is **no** test framework, no linter config, and no typecheck step in this repo.
+Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
 
-## Multi-process architecture (critical)
+---
 
-`main.py` runs a **Tkinter splash screen** in the main process, then spawns a **Qt subprocess** via `core/launcher/AppLauncher`. The subprocess loads PySide6, DB, and AI models. Communication is via `multiprocessing.Event` (ready signal) and `multiprocessing.Queue` (progress messages).
-
-Do **not** call `sys.exit()` in the subprocess before `ready_event.set()` — the launcher will hang waiting.
-`multiprocessing.freeze_support()` is required for Windows PyInstaller builds.
-
-## Model inference path
-
-- **Production (runtime)**: ONNX only. `torch`/`ultralytics`/`torchvision` are **excluded** from the PyInstaller build (see `.spec` `excludes`).
-- **Development**: YOLO .pt via `ultralytics` works if installed, but the shipped app always uses ONNX.
-- `ModelAdapterFactory` in `core/model_adapters.py` auto-selects the adapter by file extension.
-- NMS is **not** baked into the ONNX graph (`nms=False` at export); `ai_engine.py` runs global NMS post-inference via `utils/nms.py`.
-
-## Configuration
-
-All settings live in `config.py` at the repo root. There are no `.env`, `.ini`, or YAML config files. Constants are grouped by subsystem (AI, HUD, heatmap, H/W tuning, etc.).
+**These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
 
 ## Key architecture
 
@@ -37,50 +73,12 @@ All settings live in `config.py` at the repo root. There are no `.env`, `.ini`, 
 | `workers/` | QThread/QRunnable tasks: AI, gallery thumbnails, rendering, profiling |
 | `utils/` | DB, hardware profiler, NMS, logging, schema DDL |
 
-### MainWindow mixin pattern
+## graphify
 
-`MainWindow` in `gui/main_window.py` uses **multiple inheritance** with mixins from `gui/mixins/`:
-```python
-class MainWindow(AnalysisMixin, FileHandlingMixin, QMainWindow):
-```
-Each mixin injects a functional area (file open/save, AI analysis trigger, heatmap, detection layer, toolbar). New features should follow this pattern.
+This project has a graphify knowledge graph at graphify-out/.
 
-### ImageServer / engine lifecycle
-
-`core/image_server.py` provides `ImageServer` — a global singleton with an LRU `SlidePool`. External code must use:
-```python
-engine = server.acquire(path)   # refcount++
-try: ... finally: server.release(engine)
-```
-Do **not** instantiate `WSIDataEngine` directly.
-
-### Dual tile cache
-
-- `TileLRUCache` (`core/tile_cache.py:8`) — stores `QGraphicsPixmapItem`, cleared on slide switch.
-- `TileDataCache` (`core/tile_cache.py:67`) — stores decoded `QImage`, survives across slide switches to skip disk I/O.
-
-### Database
-
-SQLite at `data/wsi_data.db`, managed by `DatabaseManager` (singleton, `utils/db_manager.py`). WAL mode is enabled. Schema DDL is in `utils/db_schema.py`.
-
-## PyInstaller quirks
-
-- `sys.stdout`/`sys.stderr` can be `None` when running as a `console=False` EXE — `main.py:9-16` replaces them with `StringIO` to prevent `multiprocessing` crashes.
-- `openslide_bin` DLLs are collected via `collect_all("openslide_bin")` in the `.spec`.
-- `gui/mixins/*` and `gui/widgets/*` are listed as `hiddenimports` (dynamic import by name).
-
-## File formats
-
-Supported WSI formats: `.svs`, `.tif`, `.ndpi` (via OpenSlide).
-Model formats: `.pt` (dev only), `.onnx` (runtime).
-Export formats: CSV, JSON, GeoJSON.
-
-## Input image conventions
-
-- AI patch size defaults to 512×512 px at level 0. Patches are extracted as RGB PIL Images.
-- Global NMS uses absolute physical coordinates (level-0 pixel space).
-- Tissue mask is computed at `AI_MASK_TARGET_LEVEL` (default level 3) to skip background regions.
-
-## Hardware auto-tuning
-
-`HardwareProfiler` (`utils/hardware_profiler.py`) probes CUDA/MPS/CPU availability, VRAM, RAM, and disk I/O speed. It uses EMA-based heuristics to set `batch_size` and `stride` dynamically. CUDA OOM at runtime triggers automatic batch-size halving and retry.
+Rules:
+- Before answering architecture or codebase questions, read graphify-out/GRAPH_REPORT.md for god nodes and community structure
+- If graphify-out/wiki/index.md exists, navigate it instead of reading raw files
+- For cross-module "how does X relate to Y" questions, prefer `graphify query "<question>"`, `graphify path "<A>" "<B>"`, or `graphify explain "<concept>"` over grep — these traverse the graph's EXTRACTED + INFERRED edges instead of scanning files
+- After modifying code files in this session, run `graphify update .` to keep the graph current (AST-only, no API cost)

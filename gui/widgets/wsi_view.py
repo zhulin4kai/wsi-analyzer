@@ -2,7 +2,17 @@ import math
 
 from PIL.ImageQt import ImageQt
 from PySide6.QtCore import QRectF, Qt, QTimer, Signal
-from PySide6.QtGui import QBrush, QColor, QDragEnterEvent, QDragMoveEvent, QDropEvent, QFont, QPainter, QPen, QPixmap
+from PySide6.QtGui import (
+    QBrush,
+    QColor,
+    QDragEnterEvent,
+    QDragMoveEvent,
+    QDropEvent,
+    QFont,
+    QPainter,
+    QPen,
+    QPixmap,
+)
 from PySide6.QtWidgets import (
     QGraphicsPixmapItem,
     QGraphicsRectItem,
@@ -18,7 +28,7 @@ from core import TileLRUCache
 from utils import logger
 from workers import RenderWorker
 
-from .roi_box_item import ROIBoxItem
+from .interaction_controller import InteractionController
 
 TILE_SIZE = 512
 
@@ -84,15 +94,14 @@ class WSIView(QGraphicsView):
         self._metadata: SlideMetadata | None = None
         self._current_qimg = None  # Retain QImage ref to prevent GC during render
 
-        # Interaction state
-        self._is_panning = False
-        self._last_mouse_pos = None
-        self._is_interaction = False
-
-        # ROI state
-        self._is_roi_mode = False
-        self._roi_start_pos = None
-        self._current_roi_item = None
+        # Interaction controller — handles pan/zoom/ROI/drag-drop
+        self._interaction = InteractionController(
+            view=self, scene=self.scene_canvas, idle_threshold_ms=IDLE_THRESHOLD_MS
+        )
+        self._interaction.interaction_started.connect(self.interaction_started)
+        self._interaction.interaction_finished.connect(self.interaction_finished)
+        self._interaction.roi_drawn.connect(self.roi_drawn)
+        self._interaction.viewport_changed.connect(self._on_viewport_changed)
 
         self.render_version = 0
 
@@ -106,25 +115,11 @@ class WSIView(QGraphicsView):
         self.render_timer.setInterval(RENDER_DEBOUNCE_MS)
         self.render_timer.timeout.connect(self._request_high_res_render)
 
-        # Detect absolute idle to finalize interaction state
-        self.idle_timer = QTimer()
-        self.idle_timer.setSingleShot(True)
-        self.idle_timer.setInterval(IDLE_THRESHOLD_MS)
-        self.idle_timer.timeout.connect(self._on_absolute_idle)
-
-    def _mark_interaction(self):
-        self.idle_timer.start()
-        if not self._is_interaction:
-            self._is_interaction = True
-            self.interaction_started.emit()
-
     def _request_high_res_render(self):
         """Compute visible tile grid and route each tile through three cache levels."""
 
         def finish_interaction_early():
-            if self._is_interaction:
-                self._is_interaction = False
-                self.interaction_finished.emit()
+            self._interaction.mark_idle()
 
         if not self._current_path or not self._metadata:
             finish_interaction_early()
@@ -251,9 +246,7 @@ class WSIView(QGraphicsView):
         if self.tile_cache.contains(key):
             return
         self._add_tile_to_scene(qimg, level, col, row, x, y, scale)
-        if self._is_interaction:
-            self._is_interaction = False
-            self.interaction_finished.emit()
+        self._interaction.mark_idle()
 
     def closeEvent(self, event):
         if hasattr(self, "render_worker"):
@@ -317,70 +310,30 @@ class WSIView(QGraphicsView):
         self._render_high_res_viewport()
         self.wsi_loaded.emit(metadata)
 
-    def wheelEvent(self, event):
-        if not self._current_path:
-            return
-        self._mark_interaction()
-
-        zoom_factor = 1.15
-        if event.angleDelta().y() < 0:
-            zoom_factor = 1.0 / zoom_factor
-
-        current_scale = self.transform().m11()
-        new_scale = current_scale * zoom_factor
-        if new_scale > 1.0:
-            zoom_factor = 1.0 / current_scale
-
-        self.scale(zoom_factor, zoom_factor)
-        self.zoom_changed.emit(self.transform().m11())
+    def _on_viewport_changed(self):
+        """桥接 InteractionController.viewport_changed → render_timer + view_rect_changed"""
         self.render_timer.start()
         self.view_rect_changed.emit(self.get_visible_rect())
 
+    def wheelEvent(self, event):
+        factor = self._interaction.handle_wheel(event, bool(self._current_path))
+        if factor is not None:
+            self.scale(factor, factor)
+            self.zoom_changed.emit(self.transform().m11())
+
     def toggle_roi_mode(self, enabled: bool):
-        self._is_roi_mode = enabled
-        self.setCursor(Qt.CrossCursor if enabled else Qt.ArrowCursor)
+        self._interaction.toggle_roi_mode(enabled)
 
     def clear_roi_box(self):
-        if self._current_roi_item and self._current_roi_item.scene():
-            self.scene_canvas.removeItem(self._current_roi_item)
-            self._current_roi_item = None
+        self._interaction.clear_roi_box()
 
     def mousePressEvent(self, event):
-        if event.button() == Qt.LeftButton and self._current_path:
-            if self._is_roi_mode:
-                self._roi_start_pos = self.mapToScene(event.position().toPoint())
-                if self._current_roi_item and self._current_roi_item.scene():
-                    self.scene_canvas.removeItem(self._current_roi_item)
-                self._current_roi_item = ROIBoxItem()
-                self.scene_canvas.addItem(self._current_roi_item)
-                self._current_roi_item.update_rect(
-                    self._roi_start_pos, self._roi_start_pos
-                )
-            else:
-                self._mark_interaction()
-                self._is_panning = True
-                self._last_mouse_pos = event.position().toPoint()
-                self.setCursor(Qt.ClosedHandCursor)
+        if self._interaction.handle_mouse_press(event, bool(self._current_path)):
+            return
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
-        if self._is_roi_mode and self._roi_start_pos is not None:
-            current_scene_pos = self.mapToScene(event.position().toPoint())
-            if self._current_roi_item:
-                self._current_roi_item.update_rect(
-                    self._roi_start_pos, current_scene_pos
-                )
-        elif self._is_panning:
-            self._mark_interaction()
-            current_pos = event.position().toPoint()
-            delta = current_pos - self._last_mouse_pos
-            self._last_mouse_pos = current_pos
-            h_bar = self.horizontalScrollBar()
-            v_bar = self.verticalScrollBar()
-            h_bar.setValue(h_bar.value() - delta.x())
-            v_bar.setValue(v_bar.value() - delta.y())
-            self.render_timer.start()
-            self.view_rect_changed.emit(self.get_visible_rect())
+        self._interaction.handle_mouse_move(event)
 
         if self._current_path:
             scene_pos = self.mapToScene(event.position().toPoint())
@@ -389,29 +342,12 @@ class WSIView(QGraphicsView):
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
-        if event.button() == Qt.LeftButton:
-            if self._is_roi_mode and self._roi_start_pos is not None:
-                if self._current_roi_item:
-                    roi_coords = self._current_roi_item.get_roi_coordinates()
-                    self.roi_drawn.emit(roi_coords)
-                self._roi_start_pos = None
-            else:
-                self._is_panning = False
-                self.setCursor(Qt.ArrowCursor)
-                self.idle_timer.start()
-                self.render_timer.start()
+        self._interaction.handle_mouse_release(event)
         super().mouseReleaseEvent(event)
-
-    def _on_absolute_idle(self):
-        if self._is_interaction:
-            self._is_interaction = False
-            self.interaction_finished.emit()
 
     def _render_high_res_viewport(self):
         def finish_interaction():
-            if self._is_interaction:
-                self._is_interaction = False
-                self.interaction_finished.emit()
+            self._interaction.mark_idle()
 
         if not self._current_path or not self._metadata:
             finish_interaction()
@@ -483,20 +419,16 @@ class WSIView(QGraphicsView):
     # 以触发 MainWindow 的遮罩渲染与文件打开逻辑。
 
     def dragEnterEvent(self, event: QDragEnterEvent):
-        if self.parent():
-            self.parent().dragEnterEvent(event)
+        self._interaction.handle_drag_enter(event)
 
     def dragMoveEvent(self, event: QDragMoveEvent):
-        if self.parent():
-            self.parent().dragMoveEvent(event)
+        self._interaction.handle_drag_move(event)
 
     def dragLeaveEvent(self, event):
-        if self.parent():
-            self.parent().dragLeaveEvent(event)
+        self._interaction.handle_drag_leave(event)
 
     def dropEvent(self, event: QDropEvent):
-        if self.parent():
-            self.parent().dropEvent(event)
+        self._interaction.handle_drop(event)
 
     def set_drag_overlay(self, visible: bool):
         """显示/隐藏拖拽悬停遮罩并调整占位文字样式。"""

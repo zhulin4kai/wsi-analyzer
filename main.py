@@ -99,4 +99,10 @@ def main():
 if __name__ == "__main__":
     # Windows下打包exe防多进程炸弹必备
     multiprocessing.freeze_support()
+
+    # 在创建任何 multiprocessing 对象前强制使用 spawn 上下文。
+    # Linux/macOS 默认 fork 会导致 PySide6/Qt 段错误，且 fork 上下文
+    # 创建的 SemLock 无法被 spawn 上下文序列化。
+    multiprocessing.set_start_method("spawn", force=True)
+
     main()

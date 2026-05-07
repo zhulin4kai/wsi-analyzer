@@ -1,5 +1,6 @@
 from .image_list_panel import ImageListPanel
 from .info_bar_overlay import InfoBarOverlay
+from .interaction_controller import InteractionController
 from .lesion_gallery import LesionGallery
 from .magnification_widget import MagnificationWidget
 from .minimap_view import MinimapView
