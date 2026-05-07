@@ -1,7 +1,7 @@
 import os
 
-from PySide6.QtCore import Qt, QUrl
-from PySide6.QtGui import QActionGroup, QColor, QDragEnterEvent, QDropEvent, QAction
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor, QDragEnterEvent, QDropEvent
 from PySide6.QtWidgets import (
     QGraphicsDropShadowEffect,
     QGraphicsItemGroup,
@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
 from config import AI_LAYER_Z_VALUE, HEATMAP_Z_VALUE, HUD_MARGIN
 from core import ImageServer
 from gui.mixins import AnalysisMixin, FileHandlingMixin
+from gui.main_menu import build_main_menu
 from gui.widgets import (
     ImageListPanel,
     InfoBarOverlay,
@@ -67,216 +68,13 @@ class MainWindow(AnalysisMixin, FileHandlingMixin, QMainWindow):
         self._init_gallery_ui()
         self._init_image_list()
         self._init_overlay_hud()
-        self._init_menu()
+        build_main_menu(self)
 
         # 4. 绑定信号
         self.viewer.interaction_started.connect(self._on_interaction_start)
         self.viewer.interaction_finished.connect(self._on_interaction_finish)
         self.viewer.roi_drawn.connect(self.start_roi_analysis)
         self.viewer.wsi_loaded.connect(self._on_wsi_loaded)
-
-    def _init_menu(self):
-        menubar = self.menuBar()
-
-        # ── 文件 ──────────────────────────────────────────────────────────────
-        file_menu = menubar.addMenu("文件")
-
-        open_action = file_menu.addAction("打开 WSI 文件")
-        open_action.setShortcut("Ctrl+O")
-        open_action.triggered.connect(self.open_file)
-
-        add_action = file_menu.addAction("添加图像到列表")
-        add_action.triggered.connect(self.add_images_to_list)
-
-        file_menu.addSeparator()
-
-        export_menu = file_menu.addMenu("导出诊断报告")
-        export_menu.addAction("导出为 CSV").triggered.connect(
-            lambda: self.export_report("csv")
-        )
-        export_menu.addAction("导出为 JSON").triggered.connect(
-            lambda: self.export_report("json")
-        )
-        export_menu.addAction("导出为 GeoJSON (QuPath)").triggered.connect(
-            lambda: self.export_report("geojson")
-        )
-
-        file_menu.addSeparator()
-
-        import_annotation_action = file_menu.addAction("导入标注 (GeoJSON)")
-        import_annotation_action.triggered.connect(self.import_annotations)
-
-        file_menu.addSeparator()
-
-        self.settings_action = file_menu.addAction("系统设置")
-        self.settings_action.triggered.connect(self.open_settings)
-
-        file_menu.addSeparator()
-
-        exit_action = file_menu.addAction("退出")
-        exit_action.setShortcut("Ctrl+Q")
-        exit_action.triggered.connect(self.close)
-
-        # ── 视图 ──────────────────────────────────────────────────────────────
-        view_menu = menubar.addMenu("视图")
-
-        zoom_in_action = view_menu.addAction("放大")
-        zoom_in_action.setShortcut("Ctrl+=")
-        zoom_in_action.triggered.connect(self.viewer.zoom_in)
-
-        zoom_out_action = view_menu.addAction("缩小")
-        zoom_out_action.setShortcut("Ctrl+-")
-        zoom_out_action.triggered.connect(self.viewer.zoom_out)
-
-        reset_action = view_menu.addAction("重置视图")
-        reset_action.setShortcut("Ctrl+R")
-        # 修复：原 resetTransform() 重置为 1:1 导致只能看到切片左上角一小块
-        # 正确行为是复用 load_wsi() 的 fit-to-window 逻辑
-        reset_action.triggered.connect(self.viewer.reset_to_fit)
-
-        view_menu.addSeparator()
-
-        # 面板子菜单：使用 QDockWidget.toggleViewAction() 内建 Action，
-        # 自动维护 check 状态与面板可见性的双向同步
-        panel_menu = view_menu.addMenu("面板")
-        panel_menu.addAction(self.image_list_panel.toggleViewAction())
-        panel_menu.addAction(self.gallery.toggleViewAction())
-
-        # 鹰眼图不是 QDockWidget，手动创建子菜单（显示/隐藏 + 尺寸档位）
-        minimap_menu = panel_menu.addMenu("鹰眼图")
-
-        show_action = minimap_menu.addAction("显示鹰眼图")
-        show_action.setCheckable(True)
-        show_action.setChecked(self.minimap.isVisible())
-        show_action.toggled.connect(self.minimap.setVisible)
-
-        minimap_menu.addSeparator()
-
-        size_menu = minimap_menu.addMenu("大小")
-        self._minimap_size_group = QActionGroup(self)
-        self._minimap_size_group.setExclusive(True)
-        _SIZE_PRESETS = [
-            (0.50, "小 50%"),
-            (0.75, "中 75%"),
-            (1.00, "大 100%"),
-            (1.50, "特大 150%"),
-        ]
-        for scale, label in _SIZE_PRESETS:
-            action = QAction(label, self._minimap_size_group)
-            action.setCheckable(True)
-            action.setChecked(scale == 1.0)
-            action.triggered.connect(
-                lambda checked, s=scale: self.minimap.set_size_scale(s)
-            )
-            size_menu.addAction(action)
-
-        self.minimap.size_scale_changed.connect(self._on_minimap_size_changed)
-
-        view_menu.addSeparator()
-
-        # HUD 显示开关子菜单
-        hud_menu = view_menu.addMenu("信息显示")
-
-        scalebar_action = hud_menu.addAction("显示比例尺")
-        scalebar_action.setCheckable(True)
-        scalebar_action.setChecked(True)
-        scalebar_action.toggled.connect(self.scale_bar.setVisible)
-
-        infobar_action = hud_menu.addAction("显示坐标信息")
-        infobar_action.setCheckable(True)
-        infobar_action.setChecked(True)
-        infobar_action.toggled.connect(self.info_bar.setVisible)
-
-        mag_action = hud_menu.addAction("显示放大倍率")
-        mag_action.setCheckable(True)
-        mag_action.setChecked(True)
-        mag_action.toggled.connect(self.mag_widget.setVisible)
-
-        # ── 分析 ──────────────────────────────────────────────────────────────
-        analyze_menu = menubar.addMenu("分析")
-
-        analyze_action = analyze_menu.addAction("开始全片检测")
-        analyze_action.triggered.connect(self.start_ai_analysis)
-
-        # ROI 模式：菜单 action 与工具栏按钮双向同步（setChecked 不重发 triggered，无循环风险）
-        roi_action = analyze_menu.addAction("框选 ROI 分析")
-        roi_action.setCheckable(True)
-        roi_action.triggered.connect(self.btn_roi_analyze.setChecked)
-        self.btn_roi_analyze.toggled.connect(roi_action.setChecked)
-
-        analyze_menu.addSeparator()
-
-        cancel_action = analyze_menu.addAction("取消分析")
-        cancel_action.triggered.connect(self.cancel_ai_analysis)
-
-        clear_action = analyze_menu.addAction("清除分析结果")
-        clear_action.triggered.connect(self.clear_ai_results)
-
-        analyze_menu.addSeparator()
-
-        model_action = analyze_menu.addAction("选择模型权重")
-        model_action.triggered.connect(self.select_model)
-
-        analyze_menu.addSeparator()
-
-        # 显示预测框：菜单 action 与工具栏复选框双向同步
-        show_ai_action = analyze_menu.addAction("显示预测框")
-        show_ai_action.setCheckable(True)
-        show_ai_action.setChecked(True)
-        show_ai_action.toggled.connect(self.chk_show_ai.setChecked)
-        self.chk_show_ai.toggled.connect(show_ai_action.setChecked)
-
-        # 显示热力图：菜单 action 与工具栏复选框双向同步
-        show_heatmap_action = analyze_menu.addAction("显示热力图")
-        show_heatmap_action.setCheckable(True)
-        show_heatmap_action.setChecked(False)
-        show_heatmap_action.toggled.connect(
-            lambda checked: self.chk_show_heatmap.setChecked(checked)
-        )
-        self.chk_show_heatmap.toggled.connect(
-            lambda checked: (
-                show_heatmap_action.blockSignals(True),
-                show_heatmap_action.setChecked(checked),
-                show_heatmap_action.blockSignals(False),
-            )
-        )
-
-        # ── 帮助 ──────────────────────────────────────────────────────────────
-        help_menu = menubar.addMenu("帮助")
-
-        shortcuts_action = help_menu.addAction("快捷键参考")
-        shortcuts_action.triggered.connect(self._show_shortcuts)
-
-        help_menu.addSeparator()
-
-        about_action = help_menu.addAction("关于系统")
-        about_action.triggered.connect(self._show_about)
-
-    def _show_shortcuts(self):
-        """显示快捷键参考对话框"""
-        QMessageBox.information(
-            self,
-            "快捷键参考",
-            "Ctrl+O        打开 WSI 文件\n"
-            "Ctrl+Q        退出系统\n"
-            "Ctrl+R        重置视图\n"
-            "Ctrl+=        放大\n"
-            "Ctrl+-        缩小",
-        )
-
-    def _show_about(self):
-        """显示关于对话框"""
-        QMessageBox.about(
-            self,
-            "关于 WSIAnalyzer",
-            "<b>智能 WSI 病理切片辅助诊断系统</b> &nbsp; v1.0<br><br>"
-            "基于深度学习的全切片图像（WSI）病理辅助诊断平台，<br>"
-            "专用于微乳头状癌病灶自动检测与分析。<br><br>"
-            "<b>技术栈</b><br>"
-            "Python &nbsp;·&nbsp; PySide6 &nbsp;·&nbsp; OpenSlide "
-            "&nbsp;·&nbsp; PyTorch &nbsp;·&nbsp; Ultralytics YOLO<br><br>"
-            "© 2024 &nbsp; WSIAnalyzer",
-        )
 
     def open_settings(self):
         """打开系统设置面板"""
@@ -373,19 +171,6 @@ class MainWindow(AnalysisMixin, FileHandlingMixin, QMainWindow):
         """鹰眼图拖拽时的轻量导航，仅移动视图不触发高清渲染"""
         self.viewer.centerOn(cx, cy)
         self.viewer._trigger_view_update()
-
-    def _on_minimap_size_changed(self, scale: float):
-        """鹰眼图右键菜单切档时同步菜单栏勾选状态。"""
-        if hasattr(self, "_minimap_size_group"):
-            for action in self._minimap_size_group.actions():
-                # 从 label 中解析出 scale 值；label 形如 "大 100%"
-                parts = action.text().split()
-                if len(parts) >= 2:
-                    try:
-                        pct = float(parts[-1].rstrip("%"))
-                        action.setChecked(abs(pct / 100.0 - scale) < 1e-6)
-                    except ValueError:
-                        pass
 
     def export_report(self, fmt="csv"):
         """生成并导出结构化报告"""
