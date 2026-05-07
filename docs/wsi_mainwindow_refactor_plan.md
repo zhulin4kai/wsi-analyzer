@@ -963,7 +963,7 @@ def _activate_slide(self, file_path: str, metadata) -> None:
 
 ---
 
-# Phase 8：引入 `LayerManager` 管理图层
+# Phase 8：引入 `LayerManager` 管理图层 ✅
 
 ## 目标
 
@@ -1096,7 +1096,7 @@ Phase 4  抽离 MinimapController  ✅
 Phase 5  抽离拖拽文件解析工具  ✅
 Phase 6  抽离 tile_grid 纯计算模块  ✅
 Phase 7  函数级拆分 WSIView.load_wsi  ✅
-Phase 8  引入 LayerManager
+Phase 8  引入 LayerManager  ✅
 Phase 9  可选：引入 TileRenderController
 ```
 

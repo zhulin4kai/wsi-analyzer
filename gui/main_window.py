@@ -1,15 +1,13 @@
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QDragEnterEvent, QDropEvent
 from PySide6.QtWidgets import (
-    QGraphicsItemGroup,
-    QGraphicsPixmapItem,
     QMainWindow,
     QMessageBox,
 )
 
-from config import AI_LAYER_Z_VALUE, HEATMAP_Z_VALUE
 from core import ImageServer
 from gui.controllers import HudController, MinimapController
+from gui.layers.layer_manager import LayerManager
 from gui.main_menu import MainMenuBuilder
 from gui.mixins import AnalysisMixin, FileHandlingMixin
 from gui.widgets import (
@@ -42,18 +40,10 @@ class MainWindow(AnalysisMixin, FileHandlingMixin, QMainWindow):
         self.setCentralWidget(self.viewer)
 
         # 2. 初始化图层（Z-index 由低到高：底图[-1] → 瓦片[1~N] → 热力图[500] → 预测框[600] → ROI[1000]）
-        self.heatmap_layer_item = QGraphicsPixmapItem()
-        self.heatmap_layer_item.setZValue(HEATMAP_Z_VALUE)
-        self.heatmap_layer_item.setTransformationMode(Qt.SmoothTransformation)
-        self.viewer.scene_canvas.addItem(self.heatmap_layer_item)
-
-        self.ai_layer_group = QGraphicsItemGroup()
-        self.ai_layer_group.setZValue(AI_LAYER_Z_VALUE)
-        self.viewer.scene_canvas.addItem(self.ai_layer_group)
-
-        self.imported_layer_group = QGraphicsItemGroup()
-        self.imported_layer_group.setZValue(AI_LAYER_Z_VALUE + 10)
-        self.viewer.scene_canvas.addItem(self.imported_layer_group)
+        self.layers = LayerManager(self.viewer.scene_canvas)
+        self.heatmap_layer_item = self.layers.heatmap_layer_item
+        self.ai_layer_group = self.layers.ai_layer_group
+        self.imported_layer_group = self.layers.imported_layer_group
 
         # 3. 初始化所有 UI 面板
         self._init_ai_ui()
