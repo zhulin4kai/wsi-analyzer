@@ -855,7 +855,7 @@ def test_tile_requests_do_not_exceed_bounds():
 
 ---
 
-# Phase 7：函数级拆分 `WSIView.load_wsi()`
+# Phase 7：函数级拆分 `WSIView.load_wsi()`✅
 
 ## 目标
 
@@ -1045,7 +1045,7 @@ self.imported_layer_group = self.layers.imported_layer_group
 
 ---
 
-# Phase 9：后续可选：引入 `TileRenderController`
+# Phase 9：后续可选：引入 `TileRenderController` ✅
 
 ## 目标
 
@@ -1097,7 +1097,7 @@ Phase 5  抽离拖拽文件解析工具  ✅
 Phase 6  抽离 tile_grid 纯计算模块  ✅
 Phase 7  函数级拆分 WSIView.load_wsi  ✅
 Phase 8  引入 LayerManager  ✅
-Phase 9  可选：引入 TileRenderController
+Phase 9  可选：引入 TileRenderController  ✅
 ```
 
 为什么是这个顺序：

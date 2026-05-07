@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (
 from config import IDLE_THRESHOLD_MS, RENDER_DEBOUNCE_MS, TILE_SIZE
 from core import ImageServer, SlideMetadata
 from core import TileLRUCache
-from gui.rendering.tile_grid import compute_visible_tile_requests
+from gui.rendering.tile_render_controller import TileRenderController
 from utils import logger
 from workers import RenderWorker
 
@@ -76,9 +76,6 @@ class WSIView(QGraphicsView):
         self._drop_overlay.setVisible(False)
         self.scene_canvas.addItem(self._drop_overlay)
 
-        # 场景项 LRU 缓存；每次切换切片时清空
-        self.tile_cache = TileLRUCache(max_capacity=1024)
-
         self.setAcceptDrops(True)
         self.setRenderHint(QPainter.Antialiasing)
         self.setRenderHint(QPainter.SmoothPixmapTransform)
@@ -100,11 +97,16 @@ class WSIView(QGraphicsView):
         self._interaction.roi_drawn.connect(self.roi_drawn)
         self._interaction.viewport_changed.connect(self._on_viewport_changed)
 
-        self.render_version = 0
-
-        self.render_worker = RenderWorker(self)
-        self.render_worker.image_ready.connect(self._on_image_ready)
-        self.render_worker.start()
+        # Tile render controller — owns version, cache, worker, dispatch logic
+        self.tile_controller = TileRenderController(
+            render_worker=RenderWorker(self),
+            tile_cache=TileLRUCache(max_capacity=1024),
+            scene_canvas=self.scene_canvas,
+        )
+        self.tile_controller.render_worker.image_ready.connect(
+            self._on_image_ready
+        )
+        self.tile_controller.render_worker.start()
 
         # Debounce high-res render after interaction ends
         self.render_timer = QTimer()
@@ -113,102 +115,30 @@ class WSIView(QGraphicsView):
         self.render_timer.timeout.connect(self._request_high_res_render)
 
     def _request_high_res_render(self):
-        def finish_interaction_early():
-            self._interaction.mark_idle()
-
         if not self._current_path or not self._metadata:
-            finish_interaction_early()
+            self._interaction.mark_idle()
             return
 
         viewport_rect = self.viewport().rect()
         visible_scene_rect = self.mapToScene(viewport_rect).boundingRect()
 
-        requests = compute_visible_tile_requests(
-            metadata=self._metadata,
+        self.tile_controller.request_tiles(
             visible_scene_rect=visible_scene_rect,
             scene_rect=self.scene_canvas.sceneRect(),
             current_scale=self.transform().m11(),
-            tile_size=TILE_SIZE,
         )
 
-        if not requests:
-            finish_interaction_early()
-            return
-
-        best_level = requests[0].level
-
-        # 隐藏高分辨率已缓存瓦片，避免切换层级时的 z-fighting 渲染冲突
-        for key, item in self.tile_cache._cache.items():
-            cached_level = key[0]
-            item.setVisible(cached_level >= best_level)
-
-        self.render_version += 1
-
-        for req in requests:
-            key = (req.level, req.col, req.row)
-
-            # Level 1：场景项 LRU 缓存（无 I/O）
-            cached_item = self.tile_cache.get(key)
-            if cached_item:
-                if not cached_item.scene():
-                    self.scene_canvas.addItem(cached_item)
-                cached_item.setVisible(True)
-                continue
-
-            # Level 2：跨切片像素数据缓存（无 I/O，重访时命中可跳过磁盘读取）
-            cached_qimg = ImageServer.instance().get_tile(
-                self._current_path, req.level, req.col, req.row
-            )
-            if cached_qimg is not None:
-                self._add_tile_to_scene(
-                    cached_qimg, req.level, req.col, req.row,
-                    req.x, req.y, req.scale,
-                )
-                continue
-
-            # Level 3：派发后台 I/O 任务
-            self.render_worker.request_render(
-                self._current_path,
-                req.level, req.col, req.row,
-                req.x, req.y, req.width, req.height,
-                req.scale,
-                self.render_version,
-                priority=req.priority,
-            )
-
-        finish_interaction_early()
-
-    def _add_tile_to_scene(self, qimg, level, col, row, x, y, scale):
-        """Convert QImage → QGraphicsPixmapItem and insert into scene + scene-item cache."""
-        key = (level, col, row)
-        if self.tile_cache.contains(key):
-            return
-        pixmap = QPixmap.fromImage(qimg)
-        item = QGraphicsPixmapItem(pixmap)
-        item.setPos(x, y)
-        item.setScale(scale)
-        # Higher resolution (lower level index) renders on top
-        item.setZValue(self._metadata.level_count - level)
-        self.scene_canvas.addItem(item)
-        evicted = self.tile_cache.put(key, item)
-        if evicted and evicted.scene():
-            self.scene_canvas.removeItem(evicted)
-
-    def _on_image_ready(self, path, version, level, col, row, qimg, x, y, scale):
-        # Discard results from a previous slide or a superseded render batch
-        if path != self._current_path:
-            return
-        if version < self.render_version:
-            return
-        key = (level, col, row)
-        if self.tile_cache.contains(key):
-            return
-        self._add_tile_to_scene(qimg, level, col, row, x, y, scale)
         self._interaction.mark_idle()
 
+    def _on_image_ready(self, path, version, level, col, row, qimg, x, y, scale):
+        if self.tile_controller.on_image_ready(
+            path, version, level, col, row, qimg, x, y, scale
+        ):
+            self._interaction.mark_idle()
+
     def closeEvent(self, event):
-        if hasattr(self, "render_worker"):
-            self.render_worker.shutdown()
+        if hasattr(self, "tile_controller"):
+            self.tile_controller.render_worker.shutdown()
         super().closeEvent(event)
 
     def resizeEvent(self, event):
@@ -230,10 +160,7 @@ class WSIView(QGraphicsView):
 
     def _prepare_for_slide_switch(self):
         self.render_timer.stop()
-        self.render_version += 1000
-        self.render_worker.set_version(self.render_version)
-        self.render_worker.stop()
-
+        self.tile_controller.invalidate()
         self._current_path = None
         self._metadata = None
         self._update_placeholder_visibility()
@@ -251,10 +178,7 @@ class WSIView(QGraphicsView):
         self.resetTransform()
 
     def _clear_tile_items(self):
-        old_items = self.tile_cache.clear()
-        for item in old_items:
-            if item.scene():
-                self.scene_canvas.removeItem(item)
+        self.tile_controller.clear_tile_items()
 
     def _load_background_thumbnail(self, file_path):
         try:
@@ -277,6 +201,7 @@ class WSIView(QGraphicsView):
     def _activate_slide(self, file_path, metadata):
         self._current_path = file_path
         self._metadata = metadata
+        self.tile_controller.activate(file_path, metadata)
         self._update_placeholder_visibility()
 
         self.zoom_changed.emit(self.transform().m11())
