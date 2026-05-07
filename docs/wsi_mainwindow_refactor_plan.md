@@ -318,7 +318,7 @@ self.menu_builder.build()
 
 ---
 
-# Phase 3：拆分 HUD 控制逻辑到 `HudController`
+# Phase 3：拆分 HUD 控制逻辑到 `HudController` ✅
 
 ## 目标
 
@@ -430,7 +430,7 @@ mag_action.toggled.connect(window.hud.set_magnification_visible)
 
 ---
 
-# Phase 4：拆分鹰眼图逻辑到 `MinimapController`
+# Phase 4：拆分鹰眼图逻辑到 `MinimapController` ✅
 
 ## 目标
 
@@ -541,7 +541,7 @@ self.minimap_controller.setup()
 
 ---
 
-# Phase 5：抽离拖拽文件解析逻辑
+# Phase 5：抽离拖拽文件解析逻辑 ✅
 
 ## 目标
 
@@ -1091,9 +1091,9 @@ class TileRenderController:
 ```text
 Phase 1  公开 WSIView 导航 API，消除私有方法调用  ✅
 Phase 2  抽离 MainMenuBuilder  ✅
-Phase 3  抽离 HudController
-Phase 4  抽离 MinimapController
-Phase 5  抽离拖拽文件解析工具
+Phase 3  抽离 HudController  ✅
+Phase 4  抽离 MinimapController  ✅
+Phase 5  抽离拖拽文件解析工具  ✅
 Phase 6  抽离 tile_grid 纯计算模块
 Phase 7  函数级拆分 WSIView.load_wsi
 Phase 8  引入 LayerManager

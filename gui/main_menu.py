@@ -28,19 +28,6 @@ def _show_about(window):
     )
 
 
-def _on_minimap_size_changed(window, scale):
-    if not hasattr(window, "_minimap_size_group"):
-        return
-    for action in window._minimap_size_group.actions():
-        parts = action.text().split()
-        if len(parts) >= 2:
-            try:
-                pct = float(parts[-1].rstrip("%"))
-                action.setChecked(abs(pct / 100.0 - scale) < 1e-6)
-            except ValueError:
-                pass
-
-
 class MainMenuBuilder:
     def __init__(self, window):
         self.window = window
@@ -93,6 +80,7 @@ class MainMenuBuilder:
 
     def _build_view_menu(self):
         window = self.window
+        mc = window.minimap_controller
         view_menu = window.menuBar().addMenu("视图")
 
         zoom_in_action = view_menu.addAction("放大")
@@ -117,32 +105,26 @@ class MainMenuBuilder:
 
         show_action = minimap_menu.addAction("显示鹰眼图")
         show_action.setCheckable(True)
-        show_action.setChecked(window.minimap.isVisible())
-        show_action.toggled.connect(window.minimap.setVisible)
+        show_action.setChecked(mc.is_visible())
+        show_action.toggled.connect(mc.set_visible)
 
         minimap_menu.addSeparator()
 
         size_menu = minimap_menu.addMenu("大小")
-        window._minimap_size_group = QActionGroup(window)
-        window._minimap_size_group.setExclusive(True)
-        _SIZE_PRESETS = [
-            (0.50, "小 50%"),
-            (0.75, "中 75%"),
-            (1.00, "大 100%"),
-            (1.50, "特大 150%"),
-        ]
-        for scale, label in _SIZE_PRESETS:
-            action = QAction(label, window._minimap_size_group)
+        size_group = QActionGroup(window)
+        size_group.setExclusive(True)
+        size_actions = []
+        for scale, label in mc.SIZE_PRESETS:
+            action = QAction(label, size_group)
             action.setCheckable(True)
+            action.setData(scale)
             action.setChecked(scale == 1.0)
             action.triggered.connect(
-                lambda checked, s=scale: window.minimap.set_size_scale(s)
+                lambda checked, s=scale: mc.set_size_scale(s)
             )
             size_menu.addAction(action)
-
-        window.minimap.size_scale_changed.connect(
-            lambda s: _on_minimap_size_changed(window, s)
-        )
+            size_actions.append(action)
+        mc.register_size_actions(size_actions)
 
         view_menu.addSeparator()
 
@@ -151,17 +133,17 @@ class MainMenuBuilder:
         scalebar_action = hud_menu.addAction("显示比例尺")
         scalebar_action.setCheckable(True)
         scalebar_action.setChecked(True)
-        scalebar_action.toggled.connect(window.scale_bar.setVisible)
+        scalebar_action.toggled.connect(window.hud.set_scale_bar_visible)
 
         infobar_action = hud_menu.addAction("显示坐标信息")
         infobar_action.setCheckable(True)
         infobar_action.setChecked(True)
-        infobar_action.toggled.connect(window.info_bar.setVisible)
+        infobar_action.toggled.connect(window.hud.set_info_bar_visible)
 
         mag_action = hud_menu.addAction("显示放大倍率")
         mag_action.setCheckable(True)
         mag_action.setChecked(True)
-        mag_action.toggled.connect(window.mag_widget.setVisible)
+        mag_action.toggled.connect(window.hud.set_magnification_visible)
 
     def _build_analyze_menu(self):
         window = self.window
