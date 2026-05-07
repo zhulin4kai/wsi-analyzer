@@ -387,6 +387,32 @@ class WSIView(QGraphicsView):
     def _trigger_view_update(self):
         self.view_rect_changed.emit(self.get_visible_rect())
 
+    # ── 公开导航 API ──────────────────────────────────────────────────
+
+    def request_render_now(self):
+        self._render_high_res_viewport()
+
+    def emit_view_rect_changed(self):
+        self.view_rect_changed.emit(self.get_visible_rect())
+
+    def navigate_to(self, cx: float, cy: float, render: bool = True):
+        if not self._current_path:
+            return
+        self.centerOn(cx, cy)
+        if render:
+            self.request_render_now()
+        self.emit_view_rect_changed()
+
+    def focus_on(self, cx: float, cy: float, target_scale: float = 1.0):
+        if not self._current_path:
+            return
+        self.centerOn(cx, cy)
+        self.set_scale(target_scale)
+        self.request_render_now()
+        self.emit_view_rect_changed()
+
+    # ── zoom/public ────────────────────────────────────────────────────
+
     def zoom_in(self):
         if not self._current_path:
             return

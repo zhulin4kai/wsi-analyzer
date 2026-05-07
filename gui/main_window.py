@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
 from config import AI_LAYER_Z_VALUE, HEATMAP_Z_VALUE, HUD_MARGIN
 from core import ImageServer
 from gui.mixins import AnalysisMixin, FileHandlingMixin
-from gui.main_menu import build_main_menu
+from gui.main_menu import MainMenuBuilder
 from gui.widgets import (
     ImageListPanel,
     InfoBarOverlay,
@@ -68,7 +68,7 @@ class MainWindow(AnalysisMixin, FileHandlingMixin, QMainWindow):
         self._init_gallery_ui()
         self._init_image_list()
         self._init_overlay_hud()
-        build_main_menu(self)
+        MainMenuBuilder(self).build()
 
         # 4. 绑定信号
         self.viewer.interaction_started.connect(self._on_interaction_start)
@@ -163,14 +163,11 @@ class MainWindow(AnalysisMixin, FileHandlingMixin, QMainWindow):
 
     def navigate_main_view(self, cx, cy):
         """鹰眼图向主视图发送跳转请求时的槽函数"""
-        self.viewer.centerOn(cx, cy)
-        self.viewer._render_high_res_viewport()
-        self.viewer._trigger_view_update()
+        self.viewer.navigate_to(cx, cy, render=True)
 
     def _on_minimap_drag(self, cx, cy):
         """鹰眼图拖拽时的轻量导航，仅移动视图不触发高清渲染"""
-        self.viewer.centerOn(cx, cy)
-        self.viewer._trigger_view_update()
+        self.viewer.navigate_to(cx, cy, render=False)
 
     def export_report(self, fmt="csv"):
         """生成并导出结构化报告"""
@@ -194,23 +191,7 @@ class MainWindow(AnalysisMixin, FileHandlingMixin, QMainWindow):
 
     def _navigate_to_lesion(self, cx, cy):
         """接收画廊靶向信号，瞬间移动主视图到病灶中心并放大"""
-        self.viewer.centerOn(cx, cy)
-
-        # 尝试自动放大到一个较高的倍率以便看清细胞
-        current_scale = self.viewer.transform().m11()
-        target_scale = 1.0  # 修改为一个合理的切片聚焦倍率，避免放大过度出现马赛克
-        if current_scale < target_scale:
-            factor = target_scale / current_scale
-            self.viewer.scale(factor, factor)
-        elif current_scale > target_scale:  # 如果当前放得太大，也缩小回该视角
-            factor = target_scale / current_scale
-            self.viewer.scale(factor, factor)
-
-        # 手动触发局部高清渲染
-        if hasattr(self.viewer, "_render_high_res_viewport"):
-            self.viewer._render_high_res_viewport()
-        if hasattr(self.viewer, "_trigger_view_update"):
-            self.viewer._trigger_view_update()
+        self.viewer.focus_on(cx, cy, target_scale=1.0)
 
     # ==================== Drag and Drop ====================
 
