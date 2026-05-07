@@ -1095,7 +1095,7 @@ Phase 3  抽离 HudController  ✅
 Phase 4  抽离 MinimapController  ✅
 Phase 5  抽离拖拽文件解析工具  ✅
 Phase 6  抽离 tile_grid 纯计算模块  ✅
-Phase 7  函数级拆分 WSIView.load_wsi
+Phase 7  函数级拆分 WSIView.load_wsi  ✅
 Phase 8  引入 LayerManager
 Phase 9  可选：引入 TileRenderController
 ```

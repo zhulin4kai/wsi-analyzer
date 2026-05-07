@@ -216,34 +216,47 @@ class WSIView(QGraphicsView):
         self._update_placeholder_visibility()
 
     def load_wsi(self, file_path):
-        """Switch to a new slide. Engine lifecycle is fully delegated to ImageServer.SlidePool."""
-        # Stop pending tasks; a large version jump marks in-flight tasks as stale
+        self._prepare_for_slide_switch()
+
+        metadata = self._load_slide_metadata(file_path)
+        if metadata is None:
+            return
+
+        self._setup_scene_for_metadata(metadata)
+        self._clear_tile_items()
+        self._load_background_thumbnail(file_path)
+        self._fit_slide_to_view(metadata)
+        self._activate_slide(file_path, metadata)
+
+    def _prepare_for_slide_switch(self):
         self.render_timer.stop()
         self.render_version += 1000
-        self.render_worker.set_version(self.render_version)  # sync scheduler version
-        self.render_worker.stop()  # clear queued tasks
+        self.render_worker.set_version(self.render_version)
+        self.render_worker.stop()
 
-        # Nullify state so any late _on_image_ready calls are silently discarded
         self._current_path = None
         self._metadata = None
         self._update_placeholder_visibility()
 
+    def _load_slide_metadata(self, file_path):
         try:
-            metadata = ImageServer.instance().get_metadata(file_path)
+            return ImageServer.instance().get_metadata(file_path)
         except Exception as e:
             QMessageBox.critical(self, "错误", f"无法打开文件:\n{e}")
-            return
+            return None
 
+    def _setup_scene_for_metadata(self, metadata):
         w, h = metadata.level_0_dim
         self.scene_canvas.setSceneRect(0, 0, w, h)
         self.resetTransform()
 
-        # 清空场景项；跨切片的 TileDataCache 刻意保留，重访时可跳过磁盘 I/O
+    def _clear_tile_items(self):
         old_items = self.tile_cache.clear()
         for item in old_items:
             if item.scene():
                 self.scene_canvas.removeItem(item)
 
+    def _load_background_thumbnail(self, file_path):
         try:
             thumb_img, downsample_factor = ImageServer.instance().get_thumbnail(
                 file_path, level_from_last=2
@@ -253,19 +266,21 @@ class WSIView(QGraphicsView):
         except Exception as e:
             logger.error(f"宏观底图加载失败: {e}")
 
+    def _fit_slide_to_view(self, metadata):
+        w, h = metadata.level_0_dim
         view_rect = self.viewport().rect()
         scale_w = view_rect.width() / w
         scale_h = view_rect.height() / h
         initial_scale = min(scale_w, scale_h) * 0.95
         self.scale(initial_scale, initial_scale)
 
-        # 所有准备工作完成后才激活新的切片状态
+    def _activate_slide(self, file_path, metadata):
         self._current_path = file_path
         self._metadata = metadata
         self._update_placeholder_visibility()
 
         self.zoom_changed.emit(self.transform().m11())
-        self._render_high_res_viewport()
+        self.request_render_now()
         self.wsi_loaded.emit(metadata)
 
     def _on_viewport_changed(self):
