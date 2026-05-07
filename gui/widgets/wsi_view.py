@@ -1,5 +1,3 @@
-import math
-
 from PIL.ImageQt import ImageQt
 from PySide6.QtCore import QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import (
@@ -22,15 +20,14 @@ from PySide6.QtWidgets import (
     QMessageBox,
 )
 
-from config import IDLE_THRESHOLD_MS, RENDER_DEBOUNCE_MS
+from config import IDLE_THRESHOLD_MS, RENDER_DEBOUNCE_MS, TILE_SIZE
 from core import ImageServer, SlideMetadata
 from core import TileLRUCache
+from gui.rendering.tile_grid import compute_visible_tile_requests
 from utils import logger
 from workers import RenderWorker
 
 from .interaction_controller import InteractionController
-
-TILE_SIZE = 512
 
 
 class WSIView(QGraphicsView):
@@ -116,8 +113,6 @@ class WSIView(QGraphicsView):
         self.render_timer.timeout.connect(self._request_high_res_render)
 
     def _request_high_res_render(self):
-        """Compute visible tile grid and route each tile through three cache levels."""
-
         def finish_interaction_early():
             self._interaction.mark_idle()
 
@@ -127,18 +122,20 @@ class WSIView(QGraphicsView):
 
         viewport_rect = self.viewport().rect()
         visible_scene_rect = self.mapToScene(viewport_rect).boundingRect()
-        intersected_rect = visible_scene_rect.intersected(self.scene_canvas.sceneRect())
 
-        if intersected_rect.isEmpty():
+        requests = compute_visible_tile_requests(
+            metadata=self._metadata,
+            visible_scene_rect=visible_scene_rect,
+            scene_rect=self.scene_canvas.sceneRect(),
+            current_scale=self.transform().m11(),
+            tile_size=TILE_SIZE,
+        )
+
+        if not requests:
             finish_interaction_early()
             return
 
-        current_scale = self.transform().m11()
-        target_downsample = 1.0 / current_scale
-
-        best_level = self._metadata.get_best_level_for_downsample(target_downsample)
-        level_downsample = self._metadata.level_downsamples[best_level]
-        level_dim = self._metadata.level_dimensions[best_level]
+        best_level = requests[0].level
 
         # 隐藏高分辨率已缓存瓦片，避免切换层级时的 z-fighting 渲染冲突
         for key, item in self.tile_cache._cache.items():
@@ -147,76 +144,37 @@ class WSIView(QGraphicsView):
 
         self.render_version += 1
 
-        start_col = int((intersected_rect.left() / level_downsample) // TILE_SIZE) - 1
-        end_col = int((intersected_rect.right() / level_downsample) // TILE_SIZE) + 1
-        start_row = int((intersected_rect.top() / level_downsample) // TILE_SIZE) - 1
-        end_row = int((intersected_rect.bottom() / level_downsample) // TILE_SIZE) + 1
+        for req in requests:
+            key = (req.level, req.col, req.row)
 
-        max_col = (level_dim[0] - 1) // TILE_SIZE
-        max_row = (level_dim[1] - 1) // TILE_SIZE
+            # Level 1：场景项 LRU 缓存（无 I/O）
+            cached_item = self.tile_cache.get(key)
+            if cached_item:
+                if not cached_item.scene():
+                    self.scene_canvas.addItem(cached_item)
+                cached_item.setVisible(True)
+                continue
 
-        start_col = max(0, min(start_col, max_col))
-        end_col = max(0, min(end_col, max_col))
-        start_row = max(0, min(start_row, max_row))
-        end_row = max(0, min(end_row, max_row))
-
-        for row in range(start_row, end_row + 1):
-            for col in range(start_col, end_col + 1):
-                key = (best_level, col, row)
-
-                # Level 1：场景项 LRU 缓存（无 I/O）
-                cached_item = self.tile_cache.get(key)
-                if cached_item:
-                    if not cached_item.scene():
-                        self.scene_canvas.addItem(cached_item)
-                    cached_item.setVisible(True)
-                    continue
-
-                abs_x = col * TILE_SIZE * level_downsample
-                abs_y = row * TILE_SIZE * level_downsample
-                tile_w = level_dim[0] - col * TILE_SIZE if col == max_col else TILE_SIZE
-                tile_h = level_dim[1] - row * TILE_SIZE if row == max_row else TILE_SIZE
-
-                # Level 2：跨切片像素数据缓存（无 I/O，重访时命中可跳过磁盘读取）
-                cached_qimg = ImageServer.instance().get_tile(
-                    self._current_path, best_level, col, row
+            # Level 2：跨切片像素数据缓存（无 I/O，重访时命中可跳过磁盘读取）
+            cached_qimg = ImageServer.instance().get_tile(
+                self._current_path, req.level, req.col, req.row
+            )
+            if cached_qimg is not None:
+                self._add_tile_to_scene(
+                    cached_qimg, req.level, req.col, req.row,
+                    req.x, req.y, req.scale,
                 )
-                if cached_qimg is not None:
-                    self._add_tile_to_scene(
-                        cached_qimg,
-                        best_level,
-                        col,
-                        row,
-                        int(abs_x),
-                        int(abs_y),
-                        level_downsample,
-                    )
-                    continue
+                continue
 
-                # Level 3：派发后台 I/O 任务
-                # 优先级：中心瓦片优先渲染（数值越小优先级越高）
-                viewport_center = visible_scene_rect.center()
-                tile_center_x = abs_x + tile_w * level_downsample * 0.5
-                tile_center_y = abs_y + tile_h * level_downsample * 0.5
-                dist = math.hypot(
-                    tile_center_x - viewport_center.x(),
-                    tile_center_y - viewport_center.y(),
-                )
-                priority_score = dist / max(level_downsample, 1e-6)
-
-                self.render_worker.request_render(
-                    self._current_path,
-                    best_level,
-                    col,
-                    row,
-                    int(abs_x),
-                    int(abs_y),
-                    int(tile_w),
-                    int(tile_h),
-                    level_downsample,
-                    self.render_version,
-                    priority=priority_score,
-                )
+            # Level 3：派发后台 I/O 任务
+            self.render_worker.request_render(
+                self._current_path,
+                req.level, req.col, req.row,
+                req.x, req.y, req.width, req.height,
+                req.scale,
+                self.render_version,
+                priority=req.priority,
+            )
 
         finish_interaction_early()
 
