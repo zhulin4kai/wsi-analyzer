@@ -287,7 +287,7 @@ class MainMenuBuilder:
 `MainWindow.__init__()` 中改为：
 
 ```python
-from gui.main_menu import MainMenuBuilder
+from wsi_analyzer.ui.main_menu import MainMenuBuilder
 
 ...
 
@@ -386,7 +386,7 @@ class HudController:
 `MainWindow` 中使用：
 
 ```python
-from gui.controllers.hud_controller import HudController
+from wsi_analyzer.ui.controllers.hud_controller import HudController
 
 ...
 
@@ -733,7 +733,7 @@ def compute_visible_tile_requests(
 `WSIView._request_high_res_render()` 改成：
 
 ```python
-from gui.rendering.tile_grid import compute_visible_tile_requests
+from gui.rendering import compute_visible_tile_requests
 
 
 def _request_high_res_render(self):

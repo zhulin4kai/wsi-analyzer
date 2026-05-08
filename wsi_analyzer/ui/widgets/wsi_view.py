@@ -20,10 +20,10 @@ from PySide6.QtWidgets import (
     QMessageBox,
 )
 
-from config import IDLE_THRESHOLD_MS, RENDER_DEBOUNCE_MS, TILE_SIZE
+from config import IDLE_THRESHOLD_MS, RENDER_DEBOUNCE_MS
 from core import ImageServer, SlideMetadata
 from core import TileLRUCache
-from gui.rendering.tile_render_controller import TileRenderController
+from gui.rendering import TileRenderController
 from wsi_analyzer.infrastructure.logging.logger import logger
 from workers import RenderWorker
 

@@ -57,7 +57,7 @@ class AnalysisResultController:
             return
 
         try:
-            from gui.widgets.report_exporter import ReportExporter
+            from wsi_analyzer.ui.widgets.report_exporter import ReportExporter
             results = ReportExporter.import_geojson(file_path)
         except json.JSONDecodeError:
             QMessageBox.critical(w, "导入失败", "文件格式错误，无法解析 JSON。")

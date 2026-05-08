@@ -27,7 +27,7 @@ def run_qt_app(ready_event: multiprocessing.Event, msg_queue: multiprocessing.Qu
     from PySide6.QtGui import QIcon
     from PySide6.QtWidgets import QApplication
 
-    from gui.main_window import MainWindow
+    from wsi_analyzer.ui.main_window import MainWindow
     from wsi_analyzer.infrastructure.persistence.database import DatabaseManager
     from wsi_analyzer.infrastructure.logging.logger import logger
 
