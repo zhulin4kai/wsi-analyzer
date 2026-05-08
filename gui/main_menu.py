@@ -40,14 +40,15 @@ class MainMenuBuilder:
 
     def _build_file_menu(self):
         window = self.window
+        sc = window.slide_controller
         file_menu = window.menuBar().addMenu("文件")
 
         open_action = file_menu.addAction("打开 WSI 文件")
         open_action.setShortcut("Ctrl+O")
-        open_action.triggered.connect(window.open_file)
+        open_action.triggered.connect(sc.open_file)
 
         add_action = file_menu.addAction("添加图像到列表")
-        add_action.triggered.connect(window.add_images_to_list)
+        add_action.triggered.connect(sc.add_images_to_list)
 
         file_menu.addSeparator()
 
@@ -65,7 +66,9 @@ class MainMenuBuilder:
         file_menu.addSeparator()
 
         import_annotation_action = file_menu.addAction("导入标注 (GeoJSON)")
-        import_annotation_action.triggered.connect(window.import_annotations)
+        import_annotation_action.triggered.connect(
+            window.result_controller.import_annotations
+        )
 
         file_menu.addSeparator()
 
@@ -147,10 +150,13 @@ class MainMenuBuilder:
 
     def _build_analyze_menu(self):
         window = self.window
+        ac = window.analysis_controller
+        rc = window.result_controller
+        hc = window.heatmap_controller
         analyze_menu = window.menuBar().addMenu("分析")
 
         analyze_action = analyze_menu.addAction("开始全片检测")
-        analyze_action.triggered.connect(window.start_ai_analysis)
+        analyze_action.triggered.connect(ac.start_ai_analysis)
 
         roi_action = analyze_menu.addAction("框选 ROI 分析")
         roi_action.setCheckable(True)
@@ -160,10 +166,10 @@ class MainMenuBuilder:
         analyze_menu.addSeparator()
 
         cancel_action = analyze_menu.addAction("取消分析")
-        cancel_action.triggered.connect(window.cancel_ai_analysis)
+        cancel_action.triggered.connect(ac.cancel_ai_analysis)
 
         clear_action = analyze_menu.addAction("清除分析结果")
-        clear_action.triggered.connect(window.clear_ai_results)
+        clear_action.triggered.connect(rc.clear_ai_results)
 
         analyze_menu.addSeparator()
 
@@ -182,9 +188,9 @@ class MainMenuBuilder:
         show_heatmap_action.setCheckable(True)
         show_heatmap_action.setChecked(False)
         show_heatmap_action.toggled.connect(
-            lambda checked: window.chk_show_heatmap.setChecked(checked)
+            lambda checked: hc.chk_show_heatmap.setChecked(checked)
         )
-        window.chk_show_heatmap.toggled.connect(
+        hc.chk_show_heatmap.toggled.connect(
             lambda checked: (
                 show_heatmap_action.blockSignals(True),
                 show_heatmap_action.setChecked(checked),
