@@ -1,8 +1,10 @@
 from PySide6.QtCore import QThread, Signal
 
 import config
-from core import WSIAnalyzer
 from wsi_analyzer.infrastructure.persistence.database import DatabaseManager
+from wsi_analyzer.application.analysis.analysis_service_factory import (
+    AnalysisServiceFactory,
+)
 
 
 class AIAnalysisWorker(QThread):
@@ -21,11 +23,11 @@ class AIAnalysisWorker(QThread):
         self.model_path = model_path
         self.resume_data = resume_data
         self.roi_bbox = roi_bbox
-        self.analyzer = None
+        self.analysis_handle = None
 
     def cancel(self):
-        if self.analyzer:
-            self.analyzer.cancel()
+        if self.analysis_handle:
+            self.analysis_handle.cancel()
 
     def run(self):
         try:
@@ -78,7 +80,7 @@ class AIAnalysisWorker(QThread):
                     "nms_iou_thresh", nms_iou_thresh
                 )
 
-            self.analyzer = WSIAnalyzer(
+            self.analysis_handle = AnalysisServiceFactory.create(
                 svs_path=self.svs_path,
                 model_path=self.model_path,
                 patch_size=patch_size,
@@ -90,7 +92,7 @@ class AIAnalysisWorker(QThread):
                 target_mpp=target_mpp,
             )
 
-            results_dict = self.analyzer.process(
+            results_dict = self.analysis_handle.service.run(
                 resume_data=self.resume_data,
                 progress_callback=lambda p: self.progress_updated.emit(p),
                 status_callback=lambda s: self.status_updated.emit(s),
@@ -113,5 +115,5 @@ class AIAnalysisWorker(QThread):
         except Exception as e:
             self.error_occurred.emit(f"AI 引擎异常: {str(e)}")
         finally:
-            if self.analyzer is not None:
-                self.analyzer.close()
+            if self.analysis_handle is not None:
+                self.analysis_handle.close()
