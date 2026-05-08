@@ -16,8 +16,8 @@ from PySide6.QtWidgets import (
 )
 
 import config
+from wsi_analyzer.app.dependency_container import container
 from wsi_analyzer.infrastructure.hardware import HardwareProfiler
-from wsi_analyzer.infrastructure.persistence import DatabaseManager
 
 
 def _mpp_to_label(mpp: float, options: dict) -> str:
@@ -37,7 +37,7 @@ class SettingsDialog(QDialog):
         self.setWindowTitle("系统设置")
         self.resize(400, 300)
 
-        self._db = DatabaseManager()
+        self._db = container.database
         self._current_capacity = self._db.get_max_capacity()
         self._drive_prefix = ""
         self._profile = None

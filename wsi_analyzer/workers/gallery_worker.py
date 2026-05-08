@@ -4,7 +4,7 @@ from PIL import Image
 from PIL.ImageQt import ImageQt
 from PySide6.QtCore import QThread, Signal
 
-from wsi_analyzer.infrastructure.imaging import ImageServer
+from wsi_analyzer.app.dependency_container import container
 from wsi_analyzer.infrastructure.logging import logger
 
 
@@ -44,7 +44,7 @@ class GalleryWorker(QThread):
         engine = None
         try:
             # 通过 SlidePool 借用引擎；分析期间引用计数保持 >= 1，池不会驱逐该引擎
-            engine = ImageServer.instance().acquire_engine(self.wsi_path)
+            engine = container.image_server.acquire_engine(self.wsi_path)
 
             # OpenSlideEngine 始终具有 level_0_dim，无需兼容检查
             max_w, max_h = engine.level_0_dim
@@ -110,7 +110,7 @@ class GalleryWorker(QThread):
         finally:
             # 归还引擎引用，引用计数归零后 SlidePool 可按 LRU 策略回收
             if engine is not None:
-                ImageServer.instance().release_engine(self.wsi_path)
+                container.image_server.release_engine(self.wsi_path)
 
     def cancel(self):
         """中断切图任务"""

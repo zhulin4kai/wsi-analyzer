@@ -1,6 +1,7 @@
 from PIL.ImageQt import ImageQt
 from PySide6.QtCore import QThread, Signal
 
+from wsi_analyzer.app.dependency_container import container
 from wsi_analyzer.infrastructure.logging import logger
 
 
@@ -17,15 +18,13 @@ class ThumbnailWorker(QThread):
     def run(self):
         from PIL import Image
 
-        from wsi_analyzer.infrastructure.imaging import ImageServer
-
         resample = getattr(Image, "Resampling", Image).LANCZOS
 
         for index, path in self.tasks:
             if self._cancelled:
                 break
             try:
-                thumb_img, _ = ImageServer.instance().get_thumbnail(
+                thumb_img, _ = container.image_server.get_thumbnail(
                     path, level_from_last=1
                 )
                 thumb_img.thumbnail((self.thumb_w, self.thumb_h), resample)

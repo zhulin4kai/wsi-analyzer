@@ -11,7 +11,8 @@ from PySide6.QtWidgets import (
     QToolBar,
 )
 
-from wsi_analyzer.infrastructure.imaging import ImageServer
+from wsi_analyzer.app.dependency_container import container
+from wsi_analyzer.infrastructure.hardware import HardwareProfiler
 from wsi_analyzer.ui.controllers import (
     AnalysisController,
     AnalysisResultController,
@@ -180,7 +181,7 @@ class MainWindow(QMainWindow):
         self.current_model_path = file_path
         self.btn_sel_model.setText(f"模型: {os.path.basename(file_path)}")
 
-        db = DatabaseManager()
+        db = container.database
         if db.get_auto_tune_enabled() and file_path.endswith(".pt"):
             self._auto_tune_from_yolo(file_path, db)
         if self.current_wsi_path:
@@ -256,7 +257,7 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "设置成功", "设置已保存。")
 
     def closeEvent(self, event):
-        ImageServer.instance().shutdown()
+        container.image_server.shutdown()
         super().closeEvent(event)
 
     def resizeEvent(self, event):

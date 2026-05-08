@@ -1,15 +1,11 @@
 from PySide6.QtCore import QThread, Signal
 
 import config
-from wsi_analyzer.infrastructure.persistence import DatabaseManager
-from wsi_analyzer.application.analysis.analysis_service_factory import (
-    AnalysisServiceFactory,
-)
+from wsi_analyzer.app.dependency_container import container
+from wsi_analyzer.infrastructure.hardware import HardwareProfiler
 
 
 class AIAnalysisWorker(QThread):
-    """AI 分析后台线程"""
-
     progress_updated = Signal(int)
     status_updated = Signal(str)
     analysis_finished = Signal(dict)
@@ -33,61 +29,41 @@ class AIAnalysisWorker(QThread):
         try:
             self.status_updated.emit("正在初始化 AI 模型与计算设备")
 
-            db = DatabaseManager()
+            db = container.database
             patch_size = db.get_setting("ai_patch_size", config.AI_PATCH_SIZE)
             stride = db.get_setting("ai_stride", config.AI_STRIDE)
-            nms_iou_thresh = db.get_setting(
-                "ai_nms_iou_thresh", config.AI_NMS_IOU_THRESH
-            )
+            nms_iou_thresh = db.get_setting("ai_nms_iou_thresh", config.AI_NMS_IOU_THRESH)
             conf_thresh = db.get_setting("ai_conf_thresh", config.AI_CONF_THRESH)
-            target_mpp = float(
-                db.get_setting(
-                    "ai_model_target_mpp", config.AI_MODEL_TARGET_MPP
-                )
-            )
+            target_mpp = float(db.get_setting("ai_model_target_mpp", config.AI_MODEL_TARGET_MPP))
 
-            # 解析计算设备与批大小
             import os
-            from wsi_analyzer.infrastructure.hardware import HardwareProfiler
-
             drive_prefix = HardwareProfiler.get_storage_key(self.svs_path)
             profile = db.get_system_profile(drive_prefix)
 
             if profile:
-                device = profile.get(
-                    "device", HardwareProfiler.get_compute_device()
-                )
+                device = profile.get("device", HardwareProfiler.get_compute_device())
                 batch_size = profile.get("batch_size", 16)
             else:
                 device = HardwareProfiler.get_compute_device()
                 batch_size = 16
 
-            # 自动调优
             if db.get_auto_tune_enabled():
                 io_speed = profile.get("io_speed", 50.0) if profile else 50.0
-                model_size_mb = (
-                    os.path.getsize(self.model_path) / (1024 * 1024)
-                )
-
+                model_size_mb = os.path.getsize(self.model_path) / (1024 * 1024)
                 auto_params = HardwareProfiler.calculate_auto_tune_params(
                     io_speed, patch_size, model_size_mb
                 )
                 stride = auto_params.get("stride", stride)
                 conf_thresh = auto_params.get("conf_thresh", conf_thresh)
                 patch_size = auto_params.get("patch_size", patch_size)
-                nms_iou_thresh = auto_params.get(
-                    "nms_iou_thresh", nms_iou_thresh
-                )
+                nms_iou_thresh = auto_params.get("nms_iou_thresh", nms_iou_thresh)
 
-            self.analysis_handle = AnalysisServiceFactory.create(
+            self.analysis_handle = container.create_analysis_service(
                 svs_path=self.svs_path,
                 model_path=self.model_path,
-                patch_size=patch_size,
-                stride=stride,
-                nms_iou_thresh=nms_iou_thresh,
-                conf_thresh=conf_thresh,
-                device=device,
-                batch_size=batch_size,
+                patch_size=patch_size, stride=stride,
+                nms_iou_thresh=nms_iou_thresh, conf_thresh=conf_thresh,
+                device=device, batch_size=batch_size,
                 target_mpp=target_mpp,
             )
 
@@ -101,11 +77,7 @@ class AIAnalysisWorker(QThread):
             if results_dict is None:
                 self.error_occurred.emit("AI 引擎返回空结果")
             elif results_dict.get("status") == "error":
-                self.error_occurred.emit(
-                    results_dict.get(
-                        "message", "分析异常终止，请检查参数配置"
-                    )
-                )
+                self.error_occurred.emit(results_dict.get("message", "分析异常终止，请检查参数配置"))
             else:
                 self.analysis_finished.emit(results_dict)
 

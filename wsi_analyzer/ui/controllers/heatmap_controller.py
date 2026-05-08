@@ -14,7 +14,7 @@ from config import (
     HEATMAP_LOD_MID_THRESH,
     HEATMAP_MINI_BLUR_SIGMA,
 )
-from wsi_analyzer.infrastructure.persistence import DatabaseManager
+from wsi_analyzer.app.dependency_container import container
 
 
 class HeatmapController:
@@ -65,7 +65,7 @@ class HeatmapController:
         w = self._window
         item = self._layers.heatmap_layer_item
 
-        show_imported = DatabaseManager().settings.get_setting("show_imported_heatmap", True)
+        show_imported = container.database.settings.get_setting("show_imported_heatmap", True)
         results = list(w.current_ai_results)
         if show_imported and hasattr(w, "current_imported_annotations"):
             results.extend(w.current_imported_annotations)

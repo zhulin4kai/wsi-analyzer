@@ -99,12 +99,12 @@ class InfoBarOverlay(QWidget):
         if not self._path:
             return
         try:
-            from wsi_analyzer.infrastructure.imaging import ImageServer
+            from wsi_analyzer.app.dependency_container import container
 
             w, h = self._level_0_dim
             lx, ly = self._pending_lx, self._pending_ly
             if 0 <= lx < w and 0 <= ly < h:
-                patch = ImageServer.instance().sample_pixel(self._path, lx, ly)
+                patch = container.image_server.sample_pixel(self._path, lx, ly)
                 r, g, b = patch.convert("RGB").getpixel((0, 0))
                 self._rgb_text = f"R {r:3d}  G {g:3d}  B {b:3d}"
                 self._rgb_color = QColor(r, g, b)

@@ -5,6 +5,7 @@ from PIL.ImageQt import ImageQt
 from PySide6.QtCore import QObject, QRunnable, Signal
 from PySide6.QtGui import QImage
 
+from wsi_analyzer.app.dependency_container import container
 from wsi_analyzer.infrastructure.logging import logger
 
 class TileSchedulerSignals(QObject):
@@ -73,9 +74,7 @@ class ScheduledTileTask:
         if self.version < self._active_version_func():
             return
 
-        from wsi_analyzer.infrastructure.imaging import ImageServer
-
-        server = ImageServer.instance()
+        server = container.image_server
         engine = None
         try:
             engine = server.acquire_engine(self.path)
@@ -236,8 +235,6 @@ class PreloadTask(QRunnable):
         if not os.path.exists(self.path):
             return
         try:
-            from wsi_analyzer.infrastructure.imaging import ImageServer
-
-            ImageServer.instance().preload_engine(self.path)
+            container.image_server.preload_engine(self.path)
         except Exception as e:
             logger.warning(f"PreloadTask 预热失败 {self.path!r}: {e}")

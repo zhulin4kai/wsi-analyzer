@@ -2,9 +2,8 @@ import os
 
 from PySide6.QtWidgets import QFileDialog, QMessageBox
 
-from wsi_analyzer.infrastructure.imaging import ImageServer
+from wsi_analyzer.app.dependency_container import container
 from wsi_analyzer.infrastructure.hardware import HardwareProfiler
-from wsi_analyzer.infrastructure.persistence import DatabaseManager
 
 
 class SlideController:
@@ -76,7 +75,7 @@ class SlideController:
         )
 
         if self._viewer.current_metadata is not None:
-            thumb_img, downsample = ImageServer.instance().get_thumbnail(
+            thumb_img, downsample = container.image_server.get_thumbnail(
                 file_path, level_from_last=1
             )
             self._minimap.load_minimap(thumb_img, downsample)
@@ -86,7 +85,7 @@ class SlideController:
 
     def _post_switch_tasks(self, file_path):
         w = self._window
-        db = DatabaseManager()
+        db = container.database
         cache_data = db.get_analysis(file_path)
         if cache_data and cache_data.get("status") == "completed":
             results = cache_data.get("results", [])

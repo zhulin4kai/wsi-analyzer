@@ -1,7 +1,7 @@
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import QGraphicsPixmapItem
 
-from wsi_analyzer.infrastructure.imaging import ImageServer
+from wsi_analyzer.app.dependency_container import container
 from wsi_analyzer.ui.rendering import compute_visible_tile_requests
 
 
@@ -59,7 +59,7 @@ class TileRenderController:
                 continue
 
             # Level 2: cross-slide pixel data cache (no I/O)
-            cached_qimg = ImageServer.instance().get_tile(
+            cached_qimg = container.image_server.get_tile(
                 self.active_path, req.level, req.col, req.row
             )
             if cached_qimg is not None:

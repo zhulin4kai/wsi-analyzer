@@ -10,7 +10,7 @@ from config import (
     IMPORTED_ANNOTATION_COLOR,
     IMPORTED_ANNOTATION_WIDTH,
 )
-from wsi_analyzer.infrastructure.persistence import DatabaseManager
+from wsi_analyzer.app.dependency_container import container
 
 
 class AnalysisResultController:
@@ -146,7 +146,7 @@ class AnalysisResultController:
     def merge_and_commit(
         self, new_results, existing_results, total_patches, processed_patches
     ):
-        db = DatabaseManager()
+        db = container.database
         nms_iou_thresh = db.get_setting("ai_nms_iou_thresh", 0.25)
 
         from wsi_analyzer.domain.detection import fuse_results
@@ -178,7 +178,7 @@ class AnalysisResultController:
             w._update_heatmap_layer()
 
         if w.current_wsi_path:
-            DatabaseManager().analysis.save_analysis(
+            container.database.analysis.save_analysis(
                 file_path=w.current_wsi_path,
                 model_path=w.current_model_path or "",
                 status=status,

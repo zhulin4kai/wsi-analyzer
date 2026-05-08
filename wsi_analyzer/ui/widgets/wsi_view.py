@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
 )
 
 from config import IDLE_THRESHOLD_MS, RENDER_DEBOUNCE_MS
-from wsi_analyzer.infrastructure.imaging import ImageServer
+from wsi_analyzer.app.dependency_container import container
 from wsi_analyzer.domain.slide import SlideMetadata
 from wsi_analyzer.ui.rendering import TileLRUCache, TileRenderController
 from wsi_analyzer.infrastructure.logging import logger
@@ -182,7 +182,7 @@ class WSIView(QGraphicsView):
 
     def _load_slide_metadata(self, file_path):
         try:
-            return ImageServer.instance().get_metadata(file_path)
+            return container.image_server.get_metadata(file_path)
         except Exception as e:
             QMessageBox.critical(self, "错误", f"无法打开文件:\n{e}")
             return None
@@ -197,7 +197,7 @@ class WSIView(QGraphicsView):
 
     def _load_background_thumbnail(self, file_path):
         try:
-            thumb_img, downsample_factor = ImageServer.instance().get_thumbnail(
+            thumb_img, downsample_factor = container.image_server.get_thumbnail(
                 file_path, level_from_last=2
             )
             self.bg_layer_item.setPixmap(QPixmap.fromImage(ImageQt(thumb_img)))

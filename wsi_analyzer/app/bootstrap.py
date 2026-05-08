@@ -7,10 +7,9 @@ import multiprocessing
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
-from wsi_analyzer.ui.main_window import MainWindow
-from wsi_analyzer.infrastructure.persistence import DatabaseManager
+from wsi_analyzer.app.dependency_container import container
 from wsi_analyzer.infrastructure.logging import logger
-from wsi_analyzer.infrastructure.imaging import ImageServer
+from wsi_analyzer.ui.main_window import MainWindow
 
 
 def run_qt_app(
@@ -22,7 +21,7 @@ def run_qt_app(
     logger.info("========== 智能病理辅助诊断系统启动 ==========")
 
     msg_queue.put("正在初始化数据库...")
-    DatabaseManager()
+    _ = container.database  # trigger singleton init
 
     msg_queue.put("正在启动图形界面引擎...")
     app = QApplication(sys.argv)
@@ -41,7 +40,7 @@ def run_qt_app(
     exit_code = app.exec()
     logger.info(f"========== 系统正常退出，退出码: {exit_code} ==========")
 
-    ImageServer.instance().shutdown()
+    container.image_server.shutdown()
     sys.exit(exit_code)
 
 

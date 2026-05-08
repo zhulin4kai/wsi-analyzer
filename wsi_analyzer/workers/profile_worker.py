@@ -20,11 +20,11 @@ class ProfileWorker(QThread):
             return
         try:
             import config
+            from wsi_analyzer.app.dependency_container import container
             from wsi_analyzer.infrastructure.imaging import OpenSlideEngine
-            from wsi_analyzer.infrastructure.persistence import DatabaseManager
             from wsi_analyzer.infrastructure.hardware import HardwareProfiler
 
-            db = DatabaseManager()
+            db = container.database
 
             def init_and_thumb(fp):
                 engine = OpenSlideEngine(fp)

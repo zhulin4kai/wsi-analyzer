@@ -3,7 +3,7 @@ import os
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import QMessageBox, QProgressDialog
 
-from wsi_analyzer.infrastructure.persistence import DatabaseManager
+from wsi_analyzer.app.dependency_container import container
 from wsi_analyzer.workers import AIAnalysisWorker
 
 
@@ -28,7 +28,7 @@ class AnalysisController:
             QMessageBox.warning(w, "警告", "请先选择有效的模型权重 (.pt) 文件！")
             return
 
-        db = DatabaseManager()
+        db = container.database
         cache_data = db.get_analysis(self._slide.current_wsi_path)
         resume_data = None
 
