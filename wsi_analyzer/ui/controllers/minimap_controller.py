@@ -2,7 +2,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QGraphicsDropShadowEffect, QVBoxLayout
 
-from gui.widgets import MinimapView
+from wsi_analyzer.ui.widgets import MinimapView
 
 
 class MinimapController:

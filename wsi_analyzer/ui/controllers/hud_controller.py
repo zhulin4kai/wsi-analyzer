@@ -1,5 +1,5 @@
 from config import HUD_MARGIN
-from gui.widgets import InfoBarOverlay, ScaleBarOverlay
+from wsi_analyzer.ui.widgets import InfoBarOverlay, ScaleBarOverlay
 
 
 class HudController:

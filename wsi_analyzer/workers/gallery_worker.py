@@ -4,8 +4,8 @@ from PIL import Image
 from PIL.ImageQt import ImageQt
 from PySide6.QtCore import QThread, Signal
 
-from core import ImageServer
-from wsi_analyzer.infrastructure.logging.logger import logger
+from wsi_analyzer.infrastructure.imaging import ImageServer
+from wsi_analyzer.infrastructure.logging import logger
 
 
 class GalleryWorker(QThread):

@@ -1,7 +1,7 @@
 from PySide6.QtCore import QThread, Signal
 
 import config
-from wsi_analyzer.infrastructure.persistence.database import DatabaseManager
+from wsi_analyzer.infrastructure.persistence import DatabaseManager
 from wsi_analyzer.application.analysis.analysis_service_factory import (
     AnalysisServiceFactory,
 )
@@ -48,8 +48,7 @@ class AIAnalysisWorker(QThread):
 
             # 解析计算设备与批大小
             import os
-
-            from wsi_analyzer.infrastructure.hardware.profiler import HardwareProfiler
+            from wsi_analyzer.infrastructure.hardware import HardwareProfiler
 
             drive_prefix = HardwareProfiler.get_storage_key(self.svs_path)
             profile = db.get_system_profile(drive_prefix)

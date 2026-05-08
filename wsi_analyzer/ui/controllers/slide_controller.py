@@ -2,9 +2,9 @@ import os
 
 from PySide6.QtWidgets import QFileDialog, QMessageBox
 
-from core import ImageServer
-from wsi_analyzer.infrastructure.hardware.profiler import HardwareProfiler
-from wsi_analyzer.infrastructure.persistence.database import DatabaseManager
+from wsi_analyzer.infrastructure.imaging import ImageServer
+from wsi_analyzer.infrastructure.hardware import HardwareProfiler
+from wsi_analyzer.infrastructure.persistence import DatabaseManager
 
 
 class SlideController:
@@ -111,7 +111,7 @@ class SlideController:
                 pass
             self._profile_worker.cancel()
 
-        from workers import ProfileWorker
+        from wsi_analyzer.workers import ProfileWorker
 
         self._profile_worker = ProfileWorker(file_path, drive_prefix, existing_profile)
         self._profile_worker.profile_ready.connect(self._on_profile_ready)

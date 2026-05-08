@@ -4,11 +4,9 @@ from wsi_analyzer.application.analysis.analysis_config import AnalysisConfig
 from wsi_analyzer.application.analysis.analysis_session import AnalysisSession
 from wsi_analyzer.application.analysis.analysis_service import FullSlideAnalysisService
 from wsi_analyzer.domain.analysis.tissue_mask import TissueMaskGenerator
-from wsi_analyzer.infrastructure.imaging.image_server import ImageServer
-from wsi_analyzer.infrastructure.imaging.patch_reader import PatchReader
-from wsi_analyzer.infrastructure.inference.batch_inferencer import BatchInferencer
-from wsi_analyzer.infrastructure.inference.model_factory import ModelAdapterFactory
-from wsi_analyzer.infrastructure.logging.logger import logger
+from wsi_analyzer.infrastructure.imaging import ImageServer, PatchReader
+from wsi_analyzer.infrastructure.inference import BatchInferencer, ModelAdapterFactory
+from wsi_analyzer.infrastructure.logging import logger
 
 
 class AnalysisServiceHandle:

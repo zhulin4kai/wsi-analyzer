@@ -5,7 +5,7 @@ from PIL.ImageQt import ImageQt
 from PySide6.QtCore import QObject, QRunnable, Signal
 from PySide6.QtGui import QImage
 
-from wsi_analyzer.infrastructure.logging.logger import logger
+from wsi_analyzer.infrastructure.logging import logger
 
 class TileSchedulerSignals(QObject):
     """在主线程创建一次；由后台守护线程发射。"""
@@ -73,7 +73,7 @@ class ScheduledTileTask:
         if self.version < self._active_version_func():
             return
 
-        from core import ImageServer
+        from wsi_analyzer.infrastructure.imaging import ImageServer
 
         server = ImageServer.instance()
         engine = None
@@ -236,7 +236,7 @@ class PreloadTask(QRunnable):
         if not os.path.exists(self.path):
             return
         try:
-            from core import ImageServer
+            from wsi_analyzer.infrastructure.imaging import ImageServer
 
             ImageServer.instance().preload_engine(self.path)
         except Exception as e:

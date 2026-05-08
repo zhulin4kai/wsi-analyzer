@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
 )
 
 from config import IMAGE_LIST_THUMB_H, IMAGE_LIST_THUMB_W
-from workers import ThumbnailWorker
+from wsi_analyzer.workers import ThumbnailWorker
 
 
 class ImageListPanel(QDockWidget):
@@ -130,7 +130,7 @@ class ImageListPanel(QDockWidget):
             # 预热第一个新增切片，减少首次加载的 I/O 等待
             if first_new and os.path.exists(first_new):
                 from PySide6.QtCore import QThreadPool
-                from workers import PreloadTask
+                from wsi_analyzer.workers import PreloadTask
 
                 QThreadPool.globalInstance().start(PreloadTask(first_new), -1)
 
@@ -156,7 +156,7 @@ class ImageListPanel(QDockWidget):
             candidates.append(self._entries[idx + 1])
 
         from PySide6.QtCore import QThreadPool
-        from workers import PreloadTask
+        from wsi_analyzer.workers import PreloadTask
 
         for path in candidates:
             if os.path.exists(path):
@@ -169,7 +169,7 @@ class ImageListPanel(QDockWidget):
         path = current.data(Qt.UserRole)
         if path and os.path.exists(path):
             from PySide6.QtCore import QThreadPool
-            from workers import PreloadTask
+            from wsi_analyzer.workers import PreloadTask
 
             # 低优先级（-1）不与前台瓦片渲染竞争
             QThreadPool.globalInstance().start(PreloadTask(path), -1)

@@ -2,11 +2,10 @@ from typing import Optional
 
 from wsi_analyzer.application.analysis.analysis_config import AnalysisConfig
 from wsi_analyzer.application.analysis.analysis_session import AnalysisSession
-from wsi_analyzer.domain.analysis.patch_plan import PatchPlanner
-from wsi_analyzer.domain.analysis.roi_planner import ROIPlanner
-from wsi_analyzer.domain.detection.nms import nms_numpy
-from wsi_analyzer.infrastructure.inference.batch_inferencer import BatchInferencer
-from wsi_analyzer.infrastructure.imaging.patch_reader import PatchReader
+from wsi_analyzer.domain.analysis import PatchPlanner, ROIPlanner
+from wsi_analyzer.domain.detection import nms_numpy
+from wsi_analyzer.infrastructure.inference import BatchInferencer
+from wsi_analyzer.infrastructure.imaging import PatchReader
 
 
 class FullSlideAnalysisService:

@@ -16,8 +16,8 @@ from PySide6.QtWidgets import (
 )
 
 import config
-from wsi_analyzer.infrastructure.hardware.profiler import HardwareProfiler
-from wsi_analyzer.infrastructure.persistence.database import DatabaseManager
+from wsi_analyzer.infrastructure.hardware import HardwareProfiler
+from wsi_analyzer.infrastructure.persistence import DatabaseManager
 
 
 def _mpp_to_label(mpp: float, options: dict) -> str:

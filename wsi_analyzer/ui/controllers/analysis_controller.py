@@ -3,8 +3,8 @@ import os
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import QMessageBox, QProgressDialog
 
-from wsi_analyzer.infrastructure.persistence.database import DatabaseManager
-from workers import AIAnalysisWorker
+from wsi_analyzer.infrastructure.persistence import DatabaseManager
+from wsi_analyzer.workers import AIAnalysisWorker
 
 
 class AnalysisController:
@@ -206,7 +206,7 @@ class AnalysisController:
         db = DatabaseManager()
         nms_iou_thresh = db.get_setting("ai_nms_iou_thresh", 0.25)
 
-        from wsi_analyzer.domain.detection.fusion import fuse_results
+        from wsi_analyzer.domain.detection import fuse_results
 
         fused = fuse_results(
             getattr(w, "current_ai_results", []), new_results, nms_iou_thresh

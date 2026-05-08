@@ -8,9 +8,9 @@ from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
 from wsi_analyzer.ui.main_window import MainWindow
-from wsi_analyzer.infrastructure.persistence.database import DatabaseManager
-from wsi_analyzer.infrastructure.logging.logger import logger
-from wsi_analyzer.infrastructure.imaging.image_server import ImageServer
+from wsi_analyzer.infrastructure.persistence import DatabaseManager
+from wsi_analyzer.infrastructure.logging import logger
+from wsi_analyzer.infrastructure.imaging import ImageServer
 
 
 def run_qt_app(

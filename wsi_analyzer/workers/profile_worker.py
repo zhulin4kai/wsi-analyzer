@@ -2,7 +2,7 @@ import os
 
 from PySide6.QtCore import QThread, Signal
 
-from wsi_analyzer.infrastructure.logging.logger import logger
+from wsi_analyzer.infrastructure.logging import logger
 
 
 class ProfileWorker(QThread):
@@ -20,9 +20,9 @@ class ProfileWorker(QThread):
             return
         try:
             import config
-            from wsi_analyzer.infrastructure.imaging.openslide_engine import OpenSlideEngine
-            from wsi_analyzer.infrastructure.persistence.database import DatabaseManager
-            from wsi_analyzer.infrastructure.hardware.profiler import HardwareProfiler
+            from wsi_analyzer.infrastructure.imaging import OpenSlideEngine
+            from wsi_analyzer.infrastructure.persistence import DatabaseManager
+            from wsi_analyzer.infrastructure.hardware import HardwareProfiler
 
             db = DatabaseManager()
 

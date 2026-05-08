@@ -11,8 +11,8 @@ from PySide6.QtWidgets import (
     QToolBar,
 )
 
-from core import ImageServer
-from gui.controllers import (
+from wsi_analyzer.infrastructure.imaging import ImageServer
+from wsi_analyzer.ui.controllers import (
     AnalysisController,
     AnalysisResultController,
     HeatmapController,
@@ -20,16 +20,16 @@ from gui.controllers import (
     MinimapController,
     SlideController,
 )
-from wsi_analyzer.ui.rendering.layers.layer_manager import LayerManager
+from wsi_analyzer.ui.layers import LayerManager
 from wsi_analyzer.ui.main_menu import MainMenuBuilder
-from gui.widgets import (
+from wsi_analyzer.ui.widgets import (
     ImageListPanel,
     LesionGallery,
     MagnificationWidget,
     ReportExporter,
     WSIView,
 )
-from wsi_analyzer.shared.wsi_file_utils import extract_wsi_paths_from_mime
+from wsi_analyzer.shared import extract_wsi_paths_from_mime
 
 
 class MainWindow(QMainWindow):

@@ -1,7 +1,7 @@
 from PIL.ImageQt import ImageQt
 from PySide6.QtCore import QThread, Signal
 
-from wsi_analyzer.infrastructure.logging.logger import logger
+from wsi_analyzer.infrastructure.logging import logger
 
 
 class ThumbnailWorker(QThread):
@@ -17,7 +17,7 @@ class ThumbnailWorker(QThread):
     def run(self):
         from PIL import Image
 
-        from core import ImageServer
+        from wsi_analyzer.infrastructure.imaging import ImageServer
 
         resample = getattr(Image, "Resampling", Image).LANCZOS
 

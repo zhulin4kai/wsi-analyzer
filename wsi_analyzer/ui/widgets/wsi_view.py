@@ -21,11 +21,11 @@ from PySide6.QtWidgets import (
 )
 
 from config import IDLE_THRESHOLD_MS, RENDER_DEBOUNCE_MS
-from core import ImageServer, SlideMetadata
-from core import TileLRUCache
-from gui.rendering import TileRenderController
-from wsi_analyzer.infrastructure.logging.logger import logger
-from workers import RenderWorker
+from wsi_analyzer.infrastructure.imaging import ImageServer
+from wsi_analyzer.domain.slide import SlideMetadata
+from wsi_analyzer.ui.rendering import TileLRUCache, TileRenderController
+from wsi_analyzer.infrastructure.logging import logger
+from wsi_analyzer.workers import RenderWorker
 
 from .interaction_controller import InteractionController
 

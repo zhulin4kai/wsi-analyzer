@@ -1,4 +1,15 @@
 from .interaction_controller import InteractionController
+from .image_list_panel import ImageListPanel
+from .info_bar_overlay import InfoBarOverlay
+from .lesion_gallery import LesionGallery
+from .magnification_widget import MagnificationWidget
 from .minimap_view import MinimapView
 from .report_exporter import ReportExporter
+from .scale_bar_overlay import ScaleBarOverlay
 from .wsi_view import WSIView
+
+__all__ = [
+    "ImageListPanel", "InfoBarOverlay", "InteractionController",
+    "LesionGallery", "MagnificationWidget", "MinimapView",
+    "ReportExporter", "ScaleBarOverlay", "WSIView",
+]
