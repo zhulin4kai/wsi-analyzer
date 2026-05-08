@@ -4,7 +4,6 @@ from wsi_analyzer.application.analysis.analysis_config import AnalysisConfig
 from wsi_analyzer.application.analysis.analysis_session import AnalysisSession
 from wsi_analyzer.domain.analysis.patch_plan import PatchPlanner
 from wsi_analyzer.domain.analysis.roi_planner import ROIPlanner
-from wsi_analyzer.domain.detection.fusion import compute_roi_coordinates as _legacy_roi_coords
 from wsi_analyzer.domain.detection.nms import nms_numpy
 from wsi_analyzer.infrastructure.inference.batch_inferencer import BatchInferencer
 from wsi_analyzer.infrastructure.imaging.patch_reader import PatchReader
@@ -55,11 +54,16 @@ class FullSlideAnalysisService:
             from numpy import array
             mask = self._mask_generator.generate(array(thumb_rgb))
             roi_stride = int(self._config.patch_size * 0.5)
-            valid_coords = _legacy_roi_coords(
-                roi_bbox, self._config.patch_size, roi_stride,
-                self._engine.level_0_dim[0], self._engine.level_0_dim[1],
-                solid_mask=mask, downsample_factor=ds,
+            planner = ROIPlanner(self._config.patch_size, roi_stride)
+            valid_patch_coords = planner.plan(
+                roi_bbox=roi_bbox,
+                level_0_dim=self._engine.level_0_dim,
+                solid_mask=mask,
+                downsample_factor=ds,
+                target_level=target_level,
+                target_downsample=target_downsample,
             )
+            valid_coords = [(pc.x, pc.y) for pc in valid_patch_coords]
         elif resume_data and resume_data.get("valid_coords"):
             if status_callback:
                 status_callback("阶段 1/4: 发现断点缓存，跳过掩码生成...")

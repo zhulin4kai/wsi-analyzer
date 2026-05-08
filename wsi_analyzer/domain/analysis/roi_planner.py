@@ -53,3 +53,24 @@ class ROIPlanner:
                     ))
 
         return coords
+
+
+def generate_roi_coordinates(
+    roi_bbox,
+    patch_size: int,
+    stride: int,
+    max_width: int,
+    max_height: int,
+    solid_mask=None,
+    downsample_factor: float = 1.0,
+) -> list:
+    planner = ROIPlanner(patch_size=patch_size, stride=stride)
+    coords = planner.plan(
+        roi_bbox=roi_bbox,
+        level_0_dim=(max_width, max_height),
+        solid_mask=solid_mask,
+        downsample_factor=downsample_factor,
+        target_level=0,
+        target_downsample=1.0,
+    )
+    return [(c.x, c.y) for c in coords]

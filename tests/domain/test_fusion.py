@@ -1,6 +1,7 @@
 import numpy as np
 
-from wsi_analyzer.domain.detection.fusion import compute_roi_coordinates, fuse_results
+from wsi_analyzer.domain.analysis.roi_planner import generate_roi_coordinates as compute_roi_coordinates
+from wsi_analyzer.domain.detection.fusion import fuse_results
 
 
 class TestROICoordinates:
