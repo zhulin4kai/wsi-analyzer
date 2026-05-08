@@ -1,5 +1,3 @@
-import os
-
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -15,7 +13,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-import config
+from wsi_analyzer.config import config
 from wsi_analyzer.app.dependency_container import container
 from wsi_analyzer.infrastructure.hardware import HardwareProfiler
 

@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from config import IMAGE_LIST_THUMB_H, IMAGE_LIST_THUMB_W
+from wsi_analyzer.config.config import IMAGE_LIST_THUMB_H, IMAGE_LIST_THUMB_W
 from wsi_analyzer.workers import ThumbnailWorker
 
 

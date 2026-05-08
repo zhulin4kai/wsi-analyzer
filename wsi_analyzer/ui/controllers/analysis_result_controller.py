@@ -4,7 +4,7 @@ from PySide6.QtCore import QRectF
 from PySide6.QtGui import QColor, QPen
 from PySide6.QtWidgets import QFileDialog, QGraphicsRectItem, QMessageBox
 
-from config import (
+from wsi_analyzer.config.config import (
     AI_PEN_COLOR,
     AI_PEN_WIDTH,
     IMPORTED_ANNOTATION_COLOR,

@@ -333,7 +333,7 @@ gui/controllers/hud_controller.py
 ## 示例代码
 
 ```python
-from config import HUD_MARGIN
+from wsi_analyzer.config.config import HUD_MARGIN
 from gui.widgets import InfoBarOverlay, ScaleBarOverlay
 
 
@@ -983,7 +983,7 @@ gui/layers/layer_manager.py
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QGraphicsItemGroup, QGraphicsPixmapItem
 
-from config import AI_LAYER_Z_VALUE, HEATMAP_Z_VALUE
+from wsi_analyzer.config.config import AI_LAYER_Z_VALUE, HEATMAP_Z_VALUE
 
 
 class LayerManager:

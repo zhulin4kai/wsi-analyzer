@@ -2,7 +2,7 @@ import os
 import sqlite3
 import threading
 
-import config
+from wsi_analyzer.config import config
 from wsi_analyzer.infrastructure.logging.logger import logger
 from wsi_analyzer.infrastructure.persistence.analysis_repository import AnalysisCache
 from wsi_analyzer.infrastructure.persistence.profile_repository import ProfileStore

@@ -1,8 +1,8 @@
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QBrush, QColor, QFont, QFontDatabase, QPainter, QPen
+from PySide6.QtGui import QBrush, QColor, QFontDatabase, QPainter, QPen
 from PySide6.QtWidgets import QWidget
 
-from config import (
+from wsi_analyzer.config.config import (
     HUD_BG_COLOR,
     HUD_DIM_COLOR,
     HUD_FG_COLOR,

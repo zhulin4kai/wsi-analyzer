@@ -1,7 +1,7 @@
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QGraphicsItemGroup, QGraphicsPixmapItem
 
-from config import AI_LAYER_Z_VALUE, HEATMAP_Z_VALUE
+from wsi_analyzer.config.config import AI_LAYER_Z_VALUE, HEATMAP_Z_VALUE
 
 
 class LayerManager:

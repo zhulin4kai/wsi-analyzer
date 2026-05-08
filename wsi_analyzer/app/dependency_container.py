@@ -1,5 +1,4 @@
-import config
-import threading
+from wsi_analyzer.config import config
 
 from wsi_analyzer.application.analysis.analysis_config import AnalysisConfig
 from wsi_analyzer.application.analysis.analysis_service import FullSlideAnalysisService

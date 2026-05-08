@@ -3,8 +3,8 @@ from typing import Tuple
 
 from tqdm import tqdm
 
-from oom_policy import OOMRetryPolicy
-from prediction_mapper import PredictionMapper
+from wsi_analyzer.infrastructure.inference.oom_policy import OOMRetryPolicy
+from wsi_analyzer.infrastructure.inference.prediction_mapper import PredictionMapper
 from wsi_analyzer.infrastructure.logging import logger
 
 

@@ -1,6 +1,6 @@
 from PySide6.QtCore import QThread, Signal
 
-import config
+from wsi_analyzer.config import config
 from wsi_analyzer.app.dependency_container import container
 from wsi_analyzer.infrastructure.hardware import HardwareProfiler
 

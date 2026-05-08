@@ -1,6 +1,6 @@
 import sqlite3
 
-import config
+from wsi_analyzer.config import config
 from wsi_analyzer.infrastructure.logging.logger import logger
 
 

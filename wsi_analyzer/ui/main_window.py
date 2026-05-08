@@ -55,17 +55,16 @@ class MainWindow(QMainWindow):
         self.ai_layer_group = self.layers.ai_layer_group
         self.imported_layer_group = self.layers.imported_layer_group
 
-        # ── 2. Widgets ─────────────────────────────────────────────
-        self._init_toolbar()
+        # ── 2. Dock widgets ───────────────────────────────────────
         self._init_dock_widgets()
 
-        # ── 3. Controllers ─────────────────────────────────────────
+        # ── 3. Toolbar widgets (no controller signals yet) ──────────
+        self._init_toolbar_widgets()
+
+        # ── 4. Controllers ─────────────────────────────────────────
         self.minimap_controller = MinimapController(self.viewer, self)
         self.minimap_controller.setup()
         self.minimap = self.minimap_controller.minimap
-
-        self.hud = HudController(self.viewer, self.mag_widget)
-        self.hud.bind()
 
         self.slide_controller = SlideController(
             self, self.viewer, self.minimap, self.image_list_panel
@@ -80,16 +79,24 @@ class MainWindow(QMainWindow):
             self, self.viewer, self.slide_controller, self.result_controller
         )
 
+        # ── 5. Connect signals (controllers now exist) ──────────────
+        self._connect_toolbar_signals()
+        self._connect_dock_signals()
+
+        # ── 6. HUD + Heatmap (need mag_widget from toolbar) ─────────
+        self.hud = HudController(self.viewer, self.mag_widget)
+        self.hud.bind()
+
         self.heatmap_controller = HeatmapController(
             self, self.viewer, self.layers, self.minimap,
             self._ai_toolbar, self.export_separator,
         )
         self.heatmap_controller.setup_ui()
 
-        # ── 4. Menu ────────────────────────────────────────────────
+        # ── 7. Menu ────────────────────────────────────────────────
         MainMenuBuilder(self).build()
 
-        # ── 5. Signals ─────────────────────────────────────────────
+        # ── 8. Signals ─────────────────────────────────────────────
         self.viewer.interaction_started.connect(
             self.result_controller.on_interaction_start
         )
@@ -109,43 +116,34 @@ class MainWindow(QMainWindow):
 
     # ── Toolbar (inline UI builder) ────────────────────────────────
 
-    def _init_toolbar(self):
+    def _init_toolbar_widgets(self):
         toolbar = QToolBar("AI 辅助分析")
         self.addToolBar(Qt.TopToolBarArea, toolbar)
 
-        # magnification
         self.mag_widget = MagnificationWidget()
         toolbar.addWidget(self.mag_widget)
         toolbar.addSeparator()
 
-        # model selector
         self.btn_sel_model = QAction("选择模型: 未选择", self)
-        self.btn_sel_model.triggered.connect(self.select_model)
         toolbar.addAction(self.btn_sel_model)
         toolbar.addSeparator()
 
-        # core actions
         self.btn_analyze = QAction("▶ 全片检测", self)
-        self.btn_analyze.triggered.connect(self.analysis_controller.start_ai_analysis)
         toolbar.addAction(self.btn_analyze)
 
         self.btn_roi_analyze = QAction("ROI 分析", self)
         self.btn_roi_analyze.setCheckable(True)
-        self.btn_roi_analyze.toggled.connect(self.analysis_controller.toggle_roi_mode)
         toolbar.addAction(self.btn_roi_analyze)
 
         toolbar.addSeparator()
 
-        # view toggles
         self.chk_show_ai = QAction("预测框", self)
         self.chk_show_ai.setCheckable(True)
         self.chk_show_ai.setChecked(True)
-        self.chk_show_ai.toggled.connect(self.result_controller.toggle_ai_visibility)
         toolbar.addAction(self.chk_show_ai)
 
         self.export_separator = toolbar.addSeparator()
 
-        # export button
         self.btn_export = QPushButton("导出报告 ▾")
         self.btn_export.setEnabled(False)
         self.export_menu = QMenu(self.btn_export)
@@ -166,6 +164,12 @@ class MainWindow(QMainWindow):
         toolbar.addWidget(self.btn_export)
 
         self._ai_toolbar = toolbar
+
+    def _connect_toolbar_signals(self):
+        self.btn_sel_model.triggered.connect(self.select_model)
+        self.btn_analyze.triggered.connect(self.analysis_controller.start_ai_analysis)
+        self.btn_roi_analyze.toggled.connect(self.analysis_controller.toggle_roi_mode)
+        self.chk_show_ai.toggled.connect(self.result_controller.toggle_ai_visibility)
 
     # ── Model selection ────────────────────────────────────────────
 
@@ -232,18 +236,20 @@ class MainWindow(QMainWindow):
 
     def _init_dock_widgets(self):
         self.image_list_panel = ImageListPanel(self)
-        self.image_list_panel.image_load_requested.connect(
-            self.slide_controller._load_wsi_at_path
-        )
-        self.image_list_panel.add_requested.connect(
-            self.slide_controller.add_images_to_list
-        )
         self.addDockWidget(Qt.LeftDockWidgetArea, self.image_list_panel)
 
         self.gallery = LesionGallery(parent=self)
         self.gallery.navigate_requested.connect(self._navigate_to_lesion)
         self.gallery.hide()
         self.addDockWidget(Qt.RightDockWidgetArea, self.gallery)
+
+    def _connect_dock_signals(self):
+        self.image_list_panel.image_load_requested.connect(
+            self.slide_controller._load_wsi_at_path
+        )
+        self.image_list_panel.add_requested.connect(
+            self.slide_controller.add_images_to_list
+        )
 
     # ── Event handlers ─────────────────────────────────────────────
 

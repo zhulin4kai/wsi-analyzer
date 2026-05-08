@@ -1,4 +1,4 @@
-from config import HUD_MARGIN
+from wsi_analyzer.config.config import HUD_MARGIN
 from wsi_analyzer.ui.widgets import InfoBarOverlay, ScaleBarOverlay
 
 

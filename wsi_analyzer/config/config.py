@@ -43,7 +43,7 @@ TILE_CACHE_LIMIT_NORMAL = 300
 TILE_CACHE_LIMIT_LARGE = 1000
 
 # 数据库配置
-DB_DIR = "data"
+DB_DIR = "../../data"
 DB_FILE = os.path.join(DB_DIR, "wsi_data.db")
 DB_DEFAULT_CAPACITY_MB = 150
 DB_MIN_CAPACITY_MB = 50

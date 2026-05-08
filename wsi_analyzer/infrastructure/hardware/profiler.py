@@ -5,7 +5,7 @@ import time
 
 import psutil
 
-import config
+from wsi_analyzer.config import config
 from wsi_analyzer.infrastructure.logging.logger import logger
 
 

@@ -4,7 +4,7 @@ import cv2
 import numpy as np
 from PySide6.QtGui import QImage, QPixmap
 
-from config import (
+from wsi_analyzer.config.config import (
     HEATMAP_ALPHA,
     HEATMAP_ALPHA_GAMMA,
     HEATMAP_BIN_SIZE,

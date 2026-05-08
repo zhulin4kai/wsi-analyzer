@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
 )
 
-from config import IDLE_THRESHOLD_MS, RENDER_DEBOUNCE_MS
+from wsi_analyzer.config.config import IDLE_THRESHOLD_MS, RENDER_DEBOUNCE_MS
 from wsi_analyzer.app.dependency_container import container
 from wsi_analyzer.domain.slide import SlideMetadata
 from wsi_analyzer.ui.rendering import TileLRUCache, TileRenderController

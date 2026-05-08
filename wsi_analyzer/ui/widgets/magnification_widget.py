@@ -1,7 +1,7 @@
 from PySide6.QtCore import QEvent, Qt, Signal
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QLineEdit, QWidget
 
-from config import (
+from wsi_analyzer.config.config import (
     HUD_MAG_DEFAULT_OBJECTIVE,
     HUD_MAG_MAX,
     HUD_MAG_WIDGET_H,
