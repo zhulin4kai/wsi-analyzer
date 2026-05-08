@@ -8,10 +8,11 @@ from wsi_analyzer.workers import AIAnalysisWorker
 
 
 class AnalysisController:
-    def __init__(self, window, viewer, slide_controller):
+    def __init__(self, window, viewer, slide_controller, result_controller):
         self._window = window
         self._viewer = viewer
         self._slide = slide_controller
+        self._result = result_controller
         self.ai_thread = None
         self.progress_dialog = None
         self._is_canceling = False
@@ -203,22 +204,12 @@ class AnalysisController:
             QMessageBox.information(w, "提示", "未在该区域检测到病灶。")
             return
 
-        db = DatabaseManager()
-        nms_iou_thresh = db.get_setting("ai_nms_iou_thresh", 0.25)
-
-        from wsi_analyzer.domain.detection import fuse_results
-
-        fused = fuse_results(
-            getattr(w, "current_ai_results", []), new_results, nms_iou_thresh
+        fused = self._result.merge_and_commit(
+            new_results=new_results,
+            existing_results=getattr(w, "current_ai_results", []),
+            total_patches=results_dict.get("total_patches", 0),
+            processed_patches=results_dict.get("processed_patches", 0),
         )
-
-        w._commit_results({
-            "status": "completed",
-            "results": fused,
-            "total_patches": results_dict.get("total_patches", 0),
-            "processed_patches": results_dict.get("processed_patches", 0),
-            "valid_coords": None,
-        })
 
         w.statusBar().showMessage(
             f"局部 ROI 分析完成，合并后共 {len(fused)} 处病灶。"

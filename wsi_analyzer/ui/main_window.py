@@ -70,13 +70,13 @@ class MainWindow(QMainWindow):
             self, self.viewer, self.minimap, self.image_list_panel
         )
 
-        self.analysis_controller = AnalysisController(
-            self, self.viewer, self.slide_controller
-        )
-
         self.result_controller = AnalysisResultController(
             self, self.viewer, self.layers,
             self.gallery, self.btn_export, self.chk_show_ai,
+        )
+
+        self.analysis_controller = AnalysisController(
+            self, self.viewer, self.slide_controller, self.result_controller
         )
 
         self.heatmap_controller = HeatmapController(
@@ -248,7 +248,7 @@ class MainWindow(QMainWindow):
 
     def open_settings(self):
         from PySide6.QtWidgets import QDialog
-        from gui.dialogs import SettingsDialog
+        from dialogs import SettingsDialog
 
         dlg = SettingsDialog(self, current_wsi_path=self.current_wsi_path)
         if dlg.exec() == QDialog.Accepted:

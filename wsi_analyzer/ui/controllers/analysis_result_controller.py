@@ -143,6 +143,26 @@ class AnalysisResultController:
 
     # ── result commit ──────────────────────────────────────────────
 
+    def merge_and_commit(
+        self, new_results, existing_results, total_patches, processed_patches
+    ):
+        db = DatabaseManager()
+        nms_iou_thresh = db.get_setting("ai_nms_iou_thresh", 0.25)
+
+        from wsi_analyzer.domain.detection import fuse_results
+
+        fused = fuse_results(existing_results, new_results, nms_iou_thresh)
+
+        self._commit_results({
+            "status": "completed",
+            "results": fused,
+            "total_patches": total_patches,
+            "processed_patches": processed_patches,
+            "valid_coords": None,
+        })
+
+        return fused
+
     def _commit_results(self, results_dict):
         w = self._window
         w._close_progress_dialog()
