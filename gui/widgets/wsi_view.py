@@ -34,7 +34,7 @@ class WSIView(QGraphicsView):
     """
     视口组件：处理鼠标交互（平移、缩放）并调度瓦片渲染。
 
-    不直接持有 WSIDataEngine。通过 ImageServer 获取元数据、像素数据
+    不直接持有 OpenSlideEngine。通过 ImageServer 获取元数据、像素数据
     及缩略图；引擎生命周期由 ImageServer.SlidePool 统一管理。
     """
 

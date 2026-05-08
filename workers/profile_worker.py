@@ -4,20 +4,31 @@ from PySide6.QtCore import QThread, Signal
 
 from wsi_analyzer.infrastructure.logging.logger import logger
 
-import config
-from core import WSIDataEngine
-from wsi_analyzer.infrastructure.persistence.database import DatabaseManager
-from wsi_analyzer.infrastructure.hardware.profiler import HardwareProfiler
+
+class ProfileWorker(QThread):
+    profile_ready = Signal(str, int)
+
+    def __init__(self, file_path: str, drive_prefix: str, existing_profile):
+        super().__init__()
+        self.file_path = file_path
+        self.drive_prefix = drive_prefix
+        self.existing_profile = existing_profile
+        self._cancelled = False
+
+    def run(self):
+        if self._cancelled:
+            return
+        try:
+            import config
+            from wsi_analyzer.infrastructure.imaging.openslide_engine import OpenSlideEngine
+            from wsi_analyzer.infrastructure.persistence.database import DatabaseManager
+            from wsi_analyzer.infrastructure.hardware.profiler import HardwareProfiler
 
             db = DatabaseManager()
 
-            # 注意：此处刻意绕过 ImageServer / SlidePool，使用独立引擎句柄做 I/O 冷读测速。
-            # 若改用 ImageServer.get_thumbnail()，SlidePool 中已热的引擎会省略文件打开耗时，
-            # 导致 I/O 速度测量值偏高，进而使 EMA 进化算法的参数基准失真。
             def init_and_thumb(fp):
-                engine = WSIDataEngine(fp)
+                engine = OpenSlideEngine(fp)
                 img, _ = engine.get_thumbnail()
-                # 估算像素体积 (bytes)
                 bytes_size = img.width * img.height * 3
                 engine.close()
                 return bytes_size
@@ -33,9 +44,7 @@ from wsi_analyzer.infrastructure.hardware.profiler import HardwareProfiler
             drive_prefix = self.drive_prefix
 
             if existing and "io_speed" in existing:
-                # 使用 EMA (指数移动平均) 进化算法
                 old_io_speed = existing["io_speed"]
-                # 突变检测：如果最新测速显著偏离历史值，则重置 EMA
                 if (
                     new_io_speed > old_io_speed * 3.0
                     or new_io_speed < old_io_speed * 0.2
@@ -58,13 +67,11 @@ from wsi_analyzer.infrastructure.hardware.profiler import HardwareProfiler
             device = HardwareProfiler.get_compute_device()
             _, free_vram = HardwareProfiler.get_vram_info(device)
 
-            # 默认模型大小 100MB，切换模型时重新计算
             optimal_params = HardwareProfiler.calculate_optimal_params(
                 io_speed, free_vram, 100.0
             )
             optimal_params["io_speed"] = io_speed
 
-            # 如果用户未开启智能调优且之前有手动设定的 batch_size，予以保留
             if existing and "batch_size" in existing and not db.get_auto_tune_enabled():
                 optimal_params["batch_size"] = existing["batch_size"]
 
@@ -85,5 +92,4 @@ from wsi_analyzer.infrastructure.hardware.profiler import HardwareProfiler
             logger.error(f"ProfileWorker 测速失败 [{self.file_path}]: {e}")
 
     def cancel(self):
-        """中断测速任务"""
         self._cancelled = True

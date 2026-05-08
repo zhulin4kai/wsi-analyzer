@@ -46,7 +46,7 @@ class GalleryWorker(QThread):
             # 通过 SlidePool 借用引擎；分析期间引用计数保持 >= 1，池不会驱逐该引擎
             engine = ImageServer.instance().acquire_engine(self.wsi_path)
 
-            # WSIDataEngine 始终具有 level_0_dim，无需兼容检查
+            # OpenSlideEngine 始终具有 level_0_dim，无需兼容检查
             max_w, max_h = engine.level_0_dim
 
             for idx, item in enumerate(self.top_results):
