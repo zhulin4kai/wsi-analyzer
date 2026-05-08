@@ -6,7 +6,7 @@ from wsi_analyzer.domain.analysis.tissue_mask import TissueMaskGenerator
 from wsi_analyzer.infrastructure.imaging.patch_reader import PatchReader
 from wsi_analyzer.infrastructure.inference.batch_inferencer import BatchInferencer
 from .image_server import ImageServer
-from .model_adapters import ModelAdapterFactory
+from wsi_analyzer.infrastructure.inference.model_factory import ModelAdapterFactory
 from wsi_analyzer.infrastructure.logging.logger import logger
 
 
