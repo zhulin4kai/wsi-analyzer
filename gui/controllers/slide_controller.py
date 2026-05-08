@@ -3,7 +3,8 @@ import os
 from PySide6.QtWidgets import QFileDialog, QMessageBox
 
 from core import ImageServer
-from utils import DatabaseManager, HardwareProfiler
+from wsi_analyzer.infrastructure.hardware.profiler import HardwareProfiler
+from wsi_analyzer.infrastructure.persistence.database import DatabaseManager
 
 
 class SlideController:

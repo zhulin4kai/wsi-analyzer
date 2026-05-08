@@ -14,7 +14,7 @@ from config import (
     HEATMAP_LOD_MID_THRESH,
     HEATMAP_MINI_BLUR_SIGMA,
 )
-from utils import DatabaseManager
+from wsi_analyzer.infrastructure.persistence.database import DatabaseManager
 
 
 class HeatmapController:

@@ -1,6 +1,6 @@
 import numpy as np
 
-from utils import nms_numpy
+from wsi_analyzer.domain.detection.nms import nms_numpy
 
 
 def generate_roi_coordinates(

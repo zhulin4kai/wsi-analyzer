@@ -5,7 +5,7 @@ from typing import Any, List, Tuple
 import numpy as np
 from PIL import Image
 
-from utils import logger
+from wsi_analyzer.infrastructure.logging.logger import logger
 
 try:
     from ultralytics import YOLO as _YOLO

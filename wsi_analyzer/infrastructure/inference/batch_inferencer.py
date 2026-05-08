@@ -4,7 +4,7 @@ from typing import Optional, Tuple
 import numpy as np
 from tqdm import tqdm
 
-from utils.logger import logger
+from wsi_analyzer.infrastructure.logging import logger
 
 
 class BatchInferencer:

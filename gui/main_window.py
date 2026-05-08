@@ -29,7 +29,7 @@ from gui.widgets import (
     ReportExporter,
     WSIView,
 )
-from utils.wsi_file_utils import extract_wsi_paths_from_mime
+from wsi_analyzer.shared.wsi_file_utils import extract_wsi_paths_from_mime
 
 
 class MainWindow(QMainWindow):
@@ -169,7 +169,7 @@ class MainWindow(QMainWindow):
     # ── Model selection ────────────────────────────────────────────
 
     def select_model(self):
-        from utils import DatabaseManager
+        from wsi_analyzer.infrastructure.persistence.database import DatabaseManager
 
         file_path, _ = QFileDialog.getOpenFileName(
             self, "选择 AI 模型", "", "Model Files (*.pt *.pth)"
@@ -204,7 +204,7 @@ class MainWindow(QMainWindow):
             pass
 
     def _update_profile_for_model(self, file_path: str, db):
-        from utils import HardwareProfiler
+        from wsi_analyzer.infrastructure.hardware.profiler import HardwareProfiler
 
         drive_prefix = HardwareProfiler.get_storage_key(self.current_wsi_path)
         profile = db.get_system_profile(drive_prefix)

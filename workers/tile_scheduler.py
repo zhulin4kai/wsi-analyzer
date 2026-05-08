@@ -5,7 +5,7 @@ from PIL.ImageQt import ImageQt
 from PySide6.QtCore import QObject, QRunnable, Signal
 from PySide6.QtGui import QImage
 
-from utils import logger
+from wsi_analyzer.infrastructure.logging.logger import logger
 
 class TileSchedulerSignals(QObject):
     """在主线程创建一次；由后台守护线程发射。"""

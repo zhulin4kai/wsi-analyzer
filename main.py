@@ -28,8 +28,8 @@ def run_qt_app(ready_event: multiprocessing.Event, msg_queue: multiprocessing.Qu
     from PySide6.QtWidgets import QApplication
 
     from gui.main_window import MainWindow
-    from utils import DatabaseManager
-    from utils import logger
+    from wsi_analyzer.infrastructure.persistence.database import DatabaseManager
+    from wsi_analyzer.infrastructure.logging.logger import logger
 
     logger.info("========== 智能病理辅助诊断系统启动 ==========")
 

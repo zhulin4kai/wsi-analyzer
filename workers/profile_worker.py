@@ -2,38 +2,12 @@ import os
 
 from PySide6.QtCore import QThread, Signal
 
-from utils import logger
+from wsi_analyzer.infrastructure.logging.logger import logger
 
-
-class ProfileWorker(QThread):
-    """
-    后台 I/O 测速与硬件画像更新线程。
-    将耗时的测速操作移出主线程，避免切换切片时 UI 冻结。
-    """
-
-    # 信号：(状态栏消息, 瓦片缓存上限)
-    profile_ready = Signal(str, int)
-
-    def __init__(self, file_path: str, drive_prefix: str, existing_profile):
-        """
-        :param file_path: WSI 文件路径
-        :param drive_prefix: 驱动器前缀，用于硬件画像键
-        :param existing_profile: 已有硬件画像字典，可为 None
-        """
-        super().__init__()
-        self.file_path = file_path
-        self.drive_prefix = drive_prefix
-        self.existing_profile = existing_profile
-        self._cancelled = False
-
-    def run(self):
-        if self._cancelled:
-            return
-        try:
-            import config
-            from core import WSIDataEngine
-            from utils import DatabaseManager
-            from utils import HardwareProfiler
+import config
+from core import WSIDataEngine
+from wsi_analyzer.infrastructure.persistence.database import DatabaseManager
+from wsi_analyzer.infrastructure.hardware.profiler import HardwareProfiler
 
             db = DatabaseManager()
 

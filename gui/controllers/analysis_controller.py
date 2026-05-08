@@ -3,7 +3,7 @@ import os
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import QMessageBox, QProgressDialog
 
-from utils import DatabaseManager
+from wsi_analyzer.infrastructure.persistence.database import DatabaseManager
 from workers import AIAnalysisWorker
 
 

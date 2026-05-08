@@ -7,7 +7,7 @@ from wsi_analyzer.infrastructure.imaging.patch_reader import PatchReader
 from wsi_analyzer.infrastructure.inference.batch_inferencer import BatchInferencer
 from .image_server import ImageServer
 from .model_adapters import ModelAdapterFactory
-from utils import logger
+from wsi_analyzer.infrastructure.logging.logger import logger
 
 
 class WSIAnalyzer:

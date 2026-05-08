@@ -10,7 +10,7 @@ from config import (
     IMPORTED_ANNOTATION_COLOR,
     IMPORTED_ANNOTATION_WIDTH,
 )
-from utils import DatabaseManager
+from wsi_analyzer.infrastructure.persistence.database import DatabaseManager
 
 
 class AnalysisResultController:
