@@ -69,7 +69,7 @@ class FileHandlingMixin:
         self.viewer.load_wsi(file_path)
         self.statusBar().showMessage(f"正在加载: {os.path.basename(file_path)}...")
 
-        if self.viewer._metadata is not None:
+        if self.viewer.current_metadata is not None:
             thumb_img, downsample = ImageServer.instance().get_thumbnail(
                 file_path, level_from_last=1
             )
@@ -116,5 +116,4 @@ class FileHandlingMixin:
     def _on_profile_ready(self, status_msg: str, tile_cache_limit: int):
         """接收后台测速结果，更新状态栏与瓦片缓存上限。"""
         self.statusBar().showMessage(status_msg)
-        if hasattr(self.viewer, "tile_cache"):
-            self.viewer.tile_cache.max_capacity = tile_cache_limit
+        self.viewer.set_tile_cache_capacity(tile_cache_limit)

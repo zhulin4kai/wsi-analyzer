@@ -71,10 +71,10 @@ class HeatmapMixin:
             self._clear_heatmap()
             return
 
-        if not getattr(self.viewer, "_metadata", None):
+        if not self.viewer.current_metadata:
             return
 
-        wsi_w, wsi_h = self.viewer._metadata.level_0_dim
+        wsi_w, wsi_h = self.viewer.current_metadata.level_0_dim
         grid = self._compute_heatmap(results, wsi_w, wsi_h)
         qimage, rgba = self._grid_to_qimage(grid)
 

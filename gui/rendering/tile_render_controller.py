@@ -95,6 +95,9 @@ class TileRenderController:
 
     # ── helpers ────────────────────────────────────────────────────
 
+    def set_cache_capacity(self, capacity: int):
+        self.tile_cache.max_capacity = capacity
+
     def clear_tile_items(self):
         old_items = self.tile_cache.clear()
         for item in old_items:
@@ -102,7 +105,7 @@ class TileRenderController:
                 self.scene_canvas.removeItem(item)
 
     def _hide_coarse_tiles(self, best_level):
-        for key, item in self.tile_cache._cache.items():
+        for key, item in self.tile_cache.iter_items():
             cached_level = key[0]
             item.setVisible(cached_level >= best_level)
 

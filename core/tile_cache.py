@@ -63,6 +63,10 @@ class TileLRUCache:
         """获取当前缓存的瓦片数量"""
         return len(self._cache)
 
+    def iter_items(self):
+        """遍历所有缓存条目 (key, item)，不改变访问顺序。"""
+        return self._cache.items()
+
 
 class TileDataCache:
     """

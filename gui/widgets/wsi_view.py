@@ -114,6 +114,21 @@ class WSIView(QGraphicsView):
         self.render_timer.setInterval(RENDER_DEBOUNCE_MS)
         self.render_timer.timeout.connect(self._request_high_res_render)
 
+    # ── 公开只读属性 ──────────────────────────────────────────────────
+
+    @property
+    def current_metadata(self):
+        return self._metadata
+
+    @property
+    def current_path(self):
+        return self._current_path
+
+    def set_tile_cache_capacity(self, capacity: int):
+        self.tile_controller.set_cache_capacity(capacity)
+
+    # ── 渲染入口 ──────────────────────────────────────────────────────
+
     def _request_high_res_render(self):
         if not self._current_path or not self._metadata:
             self._interaction.mark_idle()
