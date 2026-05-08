@@ -1,6 +1,8 @@
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from PIL import Image
+
+from wsi_analyzer.domain.slide.coordinates import PatchCoordinate
 
 
 class TestPatchReader:
@@ -10,7 +12,8 @@ class TestPatchReader:
         mock_engine = MagicMock()
         mock_engine.read_region.return_value = Image.new("RGBA", (512, 512))
         reader = PatchReader(mock_engine, 0, 1.0, 512)
-        img = reader.read((100, 200))
+        coord = PatchCoordinate(x=100, y=200, size=512, level=0, downsample=1.0)
+        img = reader.read(coord)
 
         assert img.size == (512, 512)
         assert img.mode == "RGB"
@@ -20,9 +23,9 @@ class TestPatchReader:
         from wsi_analyzer.infrastructure.imaging.patch_reader import PatchReader
 
         mock_engine = MagicMock()
-        # level-downsample=4.0, patch_size=512 → ts=128
         mock_engine.read_region.return_value = Image.new("RGBA", (128, 128))
         reader = PatchReader(mock_engine, 1, 4.0, 512)
-        img = reader.read((0, 0))
+        coord = PatchCoordinate(x=0, y=0, size=512, level=1, downsample=4.0)
+        img = reader.read(coord)
 
         assert img.size == (512, 512)

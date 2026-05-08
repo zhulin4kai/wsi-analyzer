@@ -14,6 +14,14 @@ class Level0Box:
     x2: float
     y2: float
 
+    @property
+    def width(self) -> float:
+        return self.x2 - self.x1
+
+    @property
+    def height(self) -> float:
+        return self.y2 - self.y1
+
     def translate(self, dx: float, dy: float) -> "Level0Box":
         return Level0Box(
             x1=self.x1 + dx,
@@ -30,6 +38,10 @@ class PatchCoordinate:
     size: int
     level: int
     downsample: float
+
+    @property
+    def level0_origin(self) -> tuple:
+        return self.x, self.y
 
     def level0_width(self) -> float:
         return self.size * self.downsample

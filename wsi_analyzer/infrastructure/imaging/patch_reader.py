@@ -1,5 +1,7 @@
 from PIL import Image
 
+from wsi_analyzer.domain.slide.coordinates import PatchCoordinate
+
 
 class PatchReader:
     def __init__(self, engine, target_level: int, target_downsample: float, patch_size: int):
@@ -10,8 +12,8 @@ class PatchReader:
         _resample = getattr(Image, "Resampling", Image).LANCZOS if hasattr(Image, "Resampling") else Image.LANCZOS
         self._resample = _resample
 
-    def read(self, coord) -> Image.Image:
-        x, y = coord[0], coord[1]
+    def read(self, coord: PatchCoordinate) -> Image.Image:
+        x, y = coord.x, coord.y
         if self._target_level == 0:
             patch_rgba = self._engine.read_region((x, y), 0, (self._patch_size, self._patch_size))
             return patch_rgba.convert("RGB")

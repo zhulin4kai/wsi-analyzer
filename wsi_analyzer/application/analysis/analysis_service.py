@@ -4,6 +4,7 @@ from typing import Optional
 from wsi_analyzer.application.analysis.analysis_config import AnalysisConfig
 from wsi_analyzer.application.analysis.analysis_session import AnalysisSession
 from wsi_analyzer.application.analysis.coordinate_service import AnalysisCoordinateService
+from wsi_analyzer.domain.slide.coordinates import PatchCoordinate
 from wsi_analyzer.application.analysis.result_builder import AnalysisResultBuilder
 from wsi_analyzer.domain.detection import nms_numpy
 from wsi_analyzer.infrastructure.inference import BatchInferencer
@@ -43,7 +44,8 @@ class FullSlideAnalysisService:
         if resume_data and resume_data.get("valid_coords"):
             if status_callback:
                 status_callback("阶段 1/4: 发现断点缓存，跳过掩码生成...")
-            valid_coords = resume_data["valid_coords"]
+            # resume coords are raw tuples from old format
+            raw_coords = resume_data["valid_coords"]
             session.processed_count = resume_data.get("processed_patches", 0)
 
             if "raw_boxes" in resume_data:
@@ -64,12 +66,11 @@ class FullSlideAnalysisService:
             if not roi_bbox and status_callback:
                 status_callback(phase_prefix)
 
-            patch_coords = self._coordinate_service.build_coords(
+            raw_coords = self._coordinate_service.build_coords(
                 roi_bbox=roi_bbox,
                 target_level=target_level,
                 target_downsample=target_downsample,
             )
-            valid_coords = [(pc.x, pc.y) for pc in patch_coords]
 
             if not roi_bbox:
                 if session.is_cancelled:
@@ -77,11 +78,22 @@ class FullSlideAnalysisService:
                 if status_callback:
                     status_callback("阶段 2/4: 正在计算有效滑动窗口坐标...")
 
-        if not valid_coords:
+        if not raw_coords:
             return AnalysisResultBuilder.error("未提取到有效的组织区域。")
 
-        total_patches = len(valid_coords)
-        remaining = valid_coords[session.processed_count:]
+        # Convert resume tuples to PatchCoordinate if needed
+        if resume_data and resume_data.get("valid_coords"):
+            valid_coords_for_result = list(raw_coords)  # keep tuples for result dict
+            patch_coords = [
+                PatchCoordinate(x=c[0], y=c[1], size=0, level=0, downsample=0)
+                for c in raw_coords
+            ]
+        else:
+            patch_coords = raw_coords
+            valid_coords_for_result = [(pc.x, pc.y) for pc in patch_coords]
+
+        total_patches = len(patch_coords)
+        remaining = patch_coords[session.processed_count:]
 
         # ── inference ───────────────────────────────────────────────
 
@@ -112,7 +124,7 @@ class FullSlideAnalysisService:
                 raw_boxes=global_boxes,
                 raw_scores=global_scores,
                 raw_classes=global_classes,
-                valid_coords=valid_coords,
+                valid_coords=valid_coords_for_result,
                 processed_patches=final_processed,
                 total_patches=total_patches,
             )
@@ -121,7 +133,7 @@ class FullSlideAnalysisService:
             status_callback(f"分析完成！共检测到 {len(results)} 个病灶。")
         return AnalysisResultBuilder.completed(
             results=results,
-            valid_coords=valid_coords,
+            valid_coords=valid_coords_for_result,
             processed_patches=final_processed,
             total_patches=total_patches,
         )

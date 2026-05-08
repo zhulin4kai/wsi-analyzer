@@ -62,7 +62,8 @@ class BatchInferencer:
                     continue
 
                 for j, (boxes, scores, classes) in enumerate(results):
-                    X, Y = batch_coords[j][0], batch_coords[j][1]
+                    coord = batch_coords[j]
+                    X, Y = coord.x, coord.y
                     if len(boxes) == 0:
                         continue
                     for box, score, cls_id in zip(boxes, scores, classes):
