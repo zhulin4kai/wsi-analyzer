@@ -3,6 +3,7 @@ import config
 from wsi_analyzer.application.analysis.analysis_config import AnalysisConfig
 from wsi_analyzer.application.analysis.analysis_session import AnalysisSession
 from wsi_analyzer.application.analysis.analysis_service import FullSlideAnalysisService
+from wsi_analyzer.application.analysis.coordinate_service import AnalysisCoordinateService
 from wsi_analyzer.domain.analysis.tissue_mask import TissueMaskGenerator
 from wsi_analyzer.infrastructure.imaging import ImageServer, PatchReader
 from wsi_analyzer.infrastructure.inference import BatchInferencer, ModelAdapterFactory
@@ -80,31 +81,29 @@ class AnalysisServiceFactory:
         target_downsample = engine.slide.level_downsamples[target_level]
 
         reader = PatchReader(
-            engine,
-            target_level,
-            target_downsample,
-            analysis_config.patch_size,
+            engine, target_level, target_downsample, analysis_config.patch_size
         )
 
         inferencer = BatchInferencer(
-            adapter,
-            reader,
-            analysis_config.device,
-            analysis_config.batch_size,
-            analysis_config.conf_thresh,
+            adapter, reader, analysis_config.device,
+            analysis_config.batch_size, analysis_config.conf_thresh,
         )
 
         session = AnalysisSession(analysis_config)
 
-        service = FullSlideAnalysisService(
+        coordinate_service = AnalysisCoordinateService(
             mask_generator=TissueMaskGenerator(
                 getattr(config, "AI_MIN_AREA_RATIO", 0.001)
             ),
-            patch_reader=reader,
+            config=analysis_config,
+            engine=engine,
+        )
+
+        service = FullSlideAnalysisService(
+            coordinate_service=coordinate_service,
             inferencer=inferencer,
             config=analysis_config,
             session=session,
-            engine=engine,
         )
 
         return AnalysisServiceHandle(
