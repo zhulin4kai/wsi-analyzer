@@ -1,9 +1,10 @@
 import concurrent.futures
-from typing import Optional, Tuple
+from typing import Tuple
 
-import numpy as np
 from tqdm import tqdm
 
+from oom_policy import OOMRetryPolicy
+from prediction_mapper import PredictionMapper
 from wsi_analyzer.infrastructure.logging import logger
 
 
@@ -54,23 +55,19 @@ class BatchInferencer:
                 except RuntimeError as e:
                     if self._batch_size <= 1:
                         raise RuntimeError("Batch Size 已降至 1 但显存仍不足") from e
-                    if not any(kw in str(e).lower() for kw in ("out of memory", "oom", "memory")):
+                    if not OOMRetryPolicy.is_oom(e):
                         raise e
                     logger.warning("发生显存溢出 (OOM)，正在缩减 Batch Size 进行重试")
-                    self._batch_size = max(1, self._batch_size // 2)
+                    self._batch_size = OOMRetryPolicy.next_batch_size(self._batch_size)
                     i -= len(batch_coords)
                     continue
 
-                for j, (boxes, scores, classes) in enumerate(results):
-                    coord = batch_coords[j]
-                    X, Y = coord.x, coord.y
-                    if len(boxes) == 0:
-                        continue
-                    for box, score, cls_id in zip(boxes, scores, classes):
-                        lx1, ly1, lx2, ly2 = box
-                        global_boxes.append([lx1 + X, ly1 + Y, lx2 + X, ly2 + Y])
-                        global_scores.append(score)
-                        global_classes.append(cls_id)
+                new_boxes, new_scores, new_classes = PredictionMapper.to_level0_batch(
+                    results, batch_coords
+                )
+                global_boxes.extend(new_boxes)
+                global_scores.extend(new_scores)
+                global_classes.extend(new_classes)
 
                 processed += len(batch_coords)
                 pbar.update(len(batch_coords))
