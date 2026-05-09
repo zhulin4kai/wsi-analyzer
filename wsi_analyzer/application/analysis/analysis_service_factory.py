@@ -6,6 +6,7 @@ from wsi_analyzer.application.analysis.analysis_service import FullSlideAnalysis
 from wsi_analyzer.application.analysis.analysis_session import AnalysisSession
 from wsi_analyzer.application.analysis.coordinate_service import AnalysisCoordinateService
 from wsi_analyzer.domain.analysis.tissue_mask import TissueMaskGenerator
+from wsi_analyzer.infrastructure.imaging.openslide_read_adapter import OpenSlideReadAdapter
 from wsi_analyzer.infrastructure.imaging import PatchReader
 from wsi_analyzer.infrastructure.inference import BatchInferencer, ModelAdapterFactory
 from wsi_analyzer.infrastructure.logging import logger
@@ -58,7 +59,8 @@ class AnalysisServiceFactory:
 
         coordinate_service = AnalysisCoordinateService(
             mask_generator=TissueMaskGenerator(getattr(config, "AI_MIN_AREA_RATIO", 0.001)),
-            config=analysis_config, engine=engine,
+            config=analysis_config,
+            slide_port=OpenSlideReadAdapter(engine),
         )
 
         service = FullSlideAnalysisService(
