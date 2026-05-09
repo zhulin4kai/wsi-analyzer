@@ -62,8 +62,8 @@ class LesionGallery(QDockWidget):
     # 跳转信号
     navigate_requested = Signal(float, float)
 
-    def __init__(self, title="病灶画廊 (Top 50)", parent=None):
-        super().__init__(title, parent)
+    def __init__(self, parent=None):
+        super().__init__("病灶画廊 (Top 50)", parent)
         # 设置允许停靠区域
         self.setAllowedAreas(
             Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea | Qt.BottomDockWidgetArea
