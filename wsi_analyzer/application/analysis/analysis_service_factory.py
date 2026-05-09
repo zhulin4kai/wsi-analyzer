@@ -38,21 +38,9 @@ class AnalysisServiceFactory:
     def create(
         svs_path,
         model_path,
-        patch_size=512,
-        stride=400,
-        nms_iou_thresh=0.25,
-        conf_thresh=0.5,
-        device="cpu",
-        batch_size=16,
-        target_mpp=None,
     ) -> AnalysisServiceHandle:
-        analysis_config = AnalysisConfigResolver.resolve({
-            "patch_size": patch_size, "stride": stride,
-            "nms_iou_thresh": nms_iou_thresh, "conf_thresh": conf_thresh,
-            "device": device, "batch_size": batch_size,
-            "target_mpp": target_mpp,
-        })
-
+        resolver = AnalysisConfigResolver(container.database)
+        analysis_config = resolver.resolve(svs_path, model_path)
         logger.info(f"[*] 使用计算设备: {analysis_config.device}, Batch Size: {analysis_config.batch_size}")
         logger.info(f"[*] 正在加载模型: {model_path}")
         adapter = ModelAdapterFactory.create_adapter(model_path)
