@@ -105,7 +105,9 @@ class FullSlideAnalysisService:
 
         new_boxes, new_scores, new_classes, current = self._inferencer.infer(
             remaining,
-            progress_callback=progress_callback,
+            progress_callback=(
+                lambda p: progress_callback(int((session.processed_count + p) / total_patches * 100))
+            ) if progress_callback else None,
             cancel_check=lambda: session.is_cancelled,
         )
 
