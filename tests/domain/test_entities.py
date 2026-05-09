@@ -1,5 +1,6 @@
 import numpy as np
 
+from wsi_analyzer.domain.analysis.result import AnalysisResult
 from wsi_analyzer.domain.detection.entities import Detection
 from wsi_analyzer.domain.slide.coordinates import Level0Box
 
@@ -23,14 +24,12 @@ class TestDetection:
 
 class TestAnalysisResult:
     def test_completed(self):
-        from wsi_analyzer.domain.detection.entities import AnalysisResult
         dets = [Detection(bbox=Level0Box(0, 0, 10, 10), confidence=0.9, class_id=1)]
         r = AnalysisResult(status="completed", detections=dets, total_patches=100, processed_patches=100)
         assert r.status == "completed"
         assert len(r.detections) == 1
 
     def test_interrupted_with_raw(self):
-        from wsi_analyzer.domain.detection.entities import AnalysisResult
         r = AnalysisResult(
             status="interrupted",
             detections=[],
@@ -44,10 +43,36 @@ class TestAnalysisResult:
         assert r.raw_scores == [0.8]
 
     def test_error_with_message(self):
-        from wsi_analyzer.domain.detection.entities import AnalysisResult
         r = AnalysisResult(
             status="error", detections=[], total_patches=0, processed_patches=0,
             message="No tissue found"
         )
         assert r.status == "error"
         assert r.message == "No tissue found"
+
+    def test_to_dict(self):
+        dets = [Detection(bbox=Level0Box(10, 20, 30, 40), confidence=0.95, class_id=1)]
+        r = AnalysisResult(
+            status="completed", detections=dets,
+            total_patches=100, processed_patches=100,
+            valid_coords=[(0, 1)],
+        )
+        d = r.to_dict()
+        assert d["status"] == "completed"
+        assert d["results"][0]["bbox"] == [10, 20, 30, 40]
+        assert d["results"][0]["confidence"] == 0.95
+        assert d["results"][0]["class_id"] == 1
+        assert d["valid_coords"] == [(0, 1)]
+        assert d["total_patches"] == 100
+
+    def test_from_cache(self):
+        cache = {
+            "status": "completed",
+            "results": [{"bbox": [1, 2, 3, 4], "confidence": 0.8, "class_id": 2}],
+            "total_patches": 50,
+            "processed_patches": 50,
+        }
+        r = AnalysisResult.from_cache(cache)
+        assert r.status == "completed"
+        assert len(r.detections) == 1
+        assert r.detections[0].bbox == Level0Box(1, 2, 3, 4)

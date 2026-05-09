@@ -6,7 +6,7 @@ from wsi_analyzer.app.dependency_container import container
 class AIAnalysisWorker(QThread):
     progress_updated = Signal(int)
     status_updated = Signal(str)
-    analysis_finished = Signal(dict)
+    analysis_finished = Signal(object)
     error_occurred = Signal(str)
 
     def __init__(
@@ -32,19 +32,19 @@ class AIAnalysisWorker(QThread):
                 model_path=self.model_path,
             )
 
-            results_dict = self.analysis_handle.service.run(
+            result = self.analysis_handle.service.run(
                 resume_data=self.resume_data,
                 progress_callback=lambda p: self.progress_updated.emit(p),
                 status_callback=lambda s: self.status_updated.emit(s),
                 roi_bbox=self.roi_bbox,
             )
 
-            if results_dict is None:
+            if result is None:
                 self.error_occurred.emit("AI 引擎返回空结果")
-            elif results_dict.get("status") == "error":
-                self.error_occurred.emit(results_dict.get("message", "分析异常终止，请检查参数配置"))
+            elif result.status == "error":
+                self.error_occurred.emit(result.message or "分析异常终止，请检查参数配置")
             else:
-                self.analysis_finished.emit(results_dict)
+                self.analysis_finished.emit(result)
 
         except RuntimeError as re:
             self.error_occurred.emit(f"运行时错误: {str(re)}")

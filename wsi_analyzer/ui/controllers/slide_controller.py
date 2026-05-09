@@ -94,7 +94,9 @@ class SlideController:
                 QMessageBox.Yes | QMessageBox.No,
             )
             if reply == QMessageBox.Yes:
-                w.result_controller.render_ai_results({"results": results, "status": "completed"})
+                from wsi_analyzer.domain.analysis import AnalysisResult
+                result = AnalysisResult.from_cache(cache_data)
+                w.result_controller.render_ai_results(result)
                 w.statusBar().showMessage(
                     f"已从本地数据库加载 {len(results)} 个病灶。"
                 )

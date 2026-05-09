@@ -188,17 +188,17 @@ class AnalysisController:
         self.progress_dialog.close()
         self.progress_dialog = None
 
-    def _on_roi_finished(self, results_dict):
+    def _on_roi_finished(self, result):
         w = self._window
         self._close_progress_dialog()
         self._viewer.clear_roi_box()
 
-        if results_dict.get("status") == "interrupted":
+        if result.status == "interrupted":
             w.statusBar().showMessage("局部 ROI 分析已取消，结果未保存。")
             QMessageBox.information(w, "提示", "ROI 分析已取消，结果未保存。")
             return
 
-        new_results = results_dict.get("results", [])
+        new_results = result.to_dict()["results"]
         if not new_results:
             w.statusBar().showMessage("局部 ROI 分析完成，未检测到病灶。")
             QMessageBox.information(w, "提示", "未在该区域检测到病灶。")
@@ -207,8 +207,8 @@ class AnalysisController:
         fused = self._result.merge_and_commit(
             new_results=new_results,
             existing_results=getattr(w, "current_ai_results", []),
-            total_patches=results_dict.get("total_patches", 0),
-            processed_patches=results_dict.get("processed_patches", 0),
+            total_patches=result.total_patches,
+            processed_patches=result.processed_patches,
         )
 
         w.statusBar().showMessage(

@@ -3,6 +3,7 @@ import json
 from PySide6.QtWidgets import QFileDialog, QMessageBox
 
 from wsi_analyzer.app.dependency_container import container
+from wsi_analyzer.domain.analysis.result import AnalysisResult
 
 
 class AnalysisResultController:
@@ -53,7 +54,7 @@ class AnalysisResultController:
         self._layers.annotation.set_visible(self._chk_show_ai.isChecked())
         w.statusBar().showMessage(f"已导入 {len(results)} 个标注")
         if hasattr(w, "_update_heatmap_layer"):
-            w.heatmap_controller._update_heatmap_layer()
+            w._update_heatmap_layer()
 
     # ── LOD interaction ────────────────────────────────────────────
 
@@ -104,22 +105,22 @@ class AnalysisResultController:
 
         fused = fuse_results(existing_results, new_results, nms_iou_thresh)
 
-        self._commit_results({
-            "status": "completed",
-            "results": fused,
-            "total_patches": total_patches,
-            "processed_patches": processed_patches,
-            "valid_coords": None,
-        })
-
+        result = AnalysisResult(
+            status="completed",
+            processed_patches=processed_patches,
+            total_patches=total_patches,
+        )
+        self._commit_results(result, results=fused)
         return fused
 
-    def _commit_results(self, results_dict):
+    def _commit_results(self, result: AnalysisResult, results=None):
         w = self._window
         w.analysis_controller._close_progress_dialog()
 
-        results = results_dict.get("results", [])
-        status = results_dict.get("status", "completed")
+        if results is None:
+            results = result.to_dict()["results"]
+
+        status = result.status
 
         w.current_ai_results = results
         self._draw_ai_boxes(results)
@@ -129,25 +130,26 @@ class AnalysisResultController:
             w.heatmap_controller._update_heatmap_layer()
 
         if w.current_wsi_path:
+            d = result.to_dict()
             container.database.analysis.save_analysis(
                 file_path=w.current_wsi_path,
                 model_path=w.current_model_path or "",
                 status=status,
-                total_patches=results_dict.get("total_patches", 0),
-                processed_patches=results_dict.get("processed_patches", 0),
+                total_patches=result.total_patches,
+                processed_patches=result.processed_patches,
                 results=results,
-                valid_coords=results_dict.get("valid_coords"),
-                raw_boxes=results_dict.get("raw_boxes"),
-                raw_scores=results_dict.get("raw_scores"),
-                raw_classes=results_dict.get("raw_classes"),
+                valid_coords=result.valid_coords,
+                raw_boxes=result.raw_boxes,
+                raw_scores=result.raw_scores,
+                raw_classes=result.raw_classes,
             )
 
         self._gallery.load_results(w.current_wsi_path, results)
 
-    def render_ai_results(self, results_dict):
-        self._commit_results(results_dict)
-        status = results_dict.get("status", "completed")
-        count = len(results_dict.get("results", []))
+    def render_ai_results(self, result):
+        self._commit_results(result)
+        status = result.status
+        count = len(result.detections)
         if status == "completed":
             QMessageBox.information(self._window, "分析完成", f"共标记 {count} 处疑似病灶。")
         else:

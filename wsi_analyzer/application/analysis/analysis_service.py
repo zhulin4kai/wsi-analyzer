@@ -4,8 +4,9 @@ from typing import Optional
 from wsi_analyzer.application.analysis.analysis_config import AnalysisConfig
 from wsi_analyzer.application.analysis.analysis_session import AnalysisSession
 from wsi_analyzer.application.analysis.coordinate_service import AnalysisCoordinateService
-from wsi_analyzer.domain.slide.coordinates import PatchCoordinate
 from wsi_analyzer.application.analysis.result_builder import AnalysisResultBuilder
+from wsi_analyzer.domain.analysis.result import AnalysisResult
+from wsi_analyzer.domain.slide.coordinates import PatchCoordinate
 from wsi_analyzer.domain.detection import nms_numpy
 from wsi_analyzer.infrastructure.inference import BatchInferencer
 
@@ -29,7 +30,7 @@ class FullSlideAnalysisService:
         status_callback=None,
         roi_bbox: Optional[tuple] = None,
         resume_data: Optional[dict] = None,
-    ) -> dict:
+    ) -> AnalysisResult:
         session = self._session
         session._cancelled = False
 
@@ -44,7 +45,6 @@ class FullSlideAnalysisService:
         if resume_data and resume_data.get("valid_coords"):
             if status_callback:
                 status_callback("阶段 1/4: 发现断点缓存，跳过掩码生成...")
-            # resume coords are raw tuples from old format
             raw_coords = resume_data["valid_coords"]
             session.processed_count = resume_data.get("processed_patches", 0)
 
@@ -81,9 +81,8 @@ class FullSlideAnalysisService:
         if not raw_coords:
             return AnalysisResultBuilder.error("未提取到有效的组织区域。")
 
-        # Convert resume tuples to PatchCoordinate if needed
         if resume_data and resume_data.get("valid_coords"):
-            valid_coords_for_result = list(raw_coords)  # keep tuples for result dict
+            valid_coords_for_result = list(raw_coords)
             patch_coords = [
                 PatchCoordinate(x=c[0], y=c[1], size=0, level=0, downsample=0)
                 for c in raw_coords
@@ -118,39 +117,38 @@ class FullSlideAnalysisService:
 
         # ── NMS + result ────────────────────────────────────────────
 
-        results = self._apply_nms(global_boxes, global_scores, global_classes)
+        nms_boxes, nms_scores, nms_classes = self._apply_nms(global_boxes, global_scores, global_classes)
+        count = len(nms_boxes)
 
         if session.is_cancelled:
             return AnalysisResultBuilder.interrupted(
-                results=results,
-                raw_boxes=global_boxes,
-                raw_scores=global_scores,
-                raw_classes=global_classes,
+                raw_boxes=nms_boxes,
+                raw_scores=nms_scores,
+                raw_classes=nms_classes,
                 valid_coords=valid_coords_for_result,
                 processed_patches=final_processed,
                 total_patches=total_patches,
             )
 
         if status_callback:
-            status_callback(f"分析完成！共检测到 {len(results)} 个病灶。")
+            status_callback(f"分析完成！共检测到 {count} 个病灶。")
         return AnalysisResultBuilder.completed(
-            results=results,
+            raw_boxes=nms_boxes,
+            raw_scores=nms_scores,
+            raw_classes=nms_classes,
             valid_coords=valid_coords_for_result,
             processed_patches=final_processed,
             total_patches=total_patches,
         )
 
-    def _apply_nms(self, boxes, scores, classes) -> list:
+    def _apply_nms(self, boxes, scores, classes) -> tuple:
         if not boxes:
-            return []
+            return [], [], []
         boxes_arr = np.array(boxes, dtype=np.float32)
         scores_arr = np.array(scores, dtype=np.float32)
         keep = nms_numpy(boxes_arr, scores_arr, self._config.nms_iou_thresh)
-        return [
-            {
-                "bbox": [round(float(b), 2) for b in boxes_arr[idx]],
-                "confidence": round(float(scores_arr[idx]), 4),
-                "class_id": int(classes[idx]),
-            }
-            for idx in keep
-        ]
+        return (
+            [boxes_arr[idx].tolist() for idx in keep],
+            [round(float(scores_arr[idx]), 4) for idx in keep],
+            [int(classes[idx]) for idx in keep],
+        )
