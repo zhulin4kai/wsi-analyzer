@@ -52,8 +52,8 @@ class AnalysisServiceFactory:
         logger.info(f"[*] 正在打开 WSI 文件: {svs_path}")
         engine = self._image_server.acquire_engine(svs_path)
 
-        target_level = engine.get_best_level_for_mpp(analysis_config.target_mpp)
-        target_downsample = engine.slide.level_downsamples[target_level]
+        slide_port = OpenSlideReadAdapter(engine)
+        target_level, target_downsample = slide_port.resolve_target_level(analysis_config.target_mpp)
 
         reader = PatchReader(engine, target_level, target_downsample, analysis_config.patch_size)
         inferencer = BatchInferencer(adapter, reader, analysis_config.device, analysis_config.batch_size, analysis_config.conf_thresh)
