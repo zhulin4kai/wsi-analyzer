@@ -106,6 +106,22 @@ class MainWindow(QMainWindow):
 
     # ── Toolbar (inline UI builder) ────────────────────────────────
 
+    def _init_dock_widgets(self):
+        self.image_list_panel = ImageListPanel(self)
+        self.addDockWidget(Qt.LeftDockWidgetArea, self.image_list_panel)
+
+        self.gallery = LesionGallery(self)
+        self.addDockWidget(Qt.RightDockWidgetArea, self.gallery)
+
+    def _connect_dock_signals(self):
+        self.image_list_panel.image_load_requested.connect(
+            self.slide_controller._load_wsi_at_path
+        )
+        self.image_list_panel.add_requested.connect(
+            self.slide_controller.add_images_to_list
+        )
+        self.gallery.navigate_requested.connect(self._navigate_to_lesion)
+
     def _init_toolbar_widgets(self):
         toolbar = QToolBar("AI 辅助分析")
         self.addToolBar(Qt.TopToolBarArea, toolbar)

@@ -14,6 +14,7 @@ class AnalysisResultController:
         self._gallery = gallery
         self._btn_export = btn_export
         self._chk_show_ai = chk_show_ai
+        self._was_ai_visible = True
 
     # ── AI box drawing ─────────────────────────────────────────────
 
