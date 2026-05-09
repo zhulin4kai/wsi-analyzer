@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (
     QToolBar,
 )
 
-from wsi_analyzer.app.dependency_container import container
+
 from wsi_analyzer.ui.controllers import (
     AnalysisController,
     AnalysisResultController,
@@ -171,10 +171,6 @@ class MainWindow(QMainWindow):
         if dlg.exec() == QDialog.Accepted:
             dlg.apply_settings()
             QMessageBox.information(self, "设置成功", "设置已保存。")
-
-    def closeEvent(self, event):
-        container.image_server.shutdown()
-        super().closeEvent(event)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
