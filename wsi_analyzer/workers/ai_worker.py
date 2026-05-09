@@ -1,6 +1,6 @@
 from PySide6.QtCore import QThread, Signal
 
-from wsi_analyzer.application.analysis.analysis_service_factory import AnalysisServiceFactory
+from wsi_analyzer.app.dependency_container import container
 
 
 class AIAnalysisWorker(QThread):
@@ -27,7 +27,7 @@ class AIAnalysisWorker(QThread):
         try:
             self.status_updated.emit("正在初始化 AI 模型与计算设备")
 
-            self.analysis_handle = AnalysisServiceFactory.create(
+            self.analysis_handle = container.analysis_service_factory.create(
                 svs_path=self.svs_path,
                 model_path=self.model_path,
             )

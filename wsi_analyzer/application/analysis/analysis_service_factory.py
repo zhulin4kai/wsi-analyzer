@@ -1,6 +1,5 @@
 import config
 
-from wsi_analyzer.app.dependency_container import container
 from wsi_analyzer.application.analysis.analysis_config_resolver import AnalysisConfigResolver
 from wsi_analyzer.application.analysis.analysis_service import FullSlideAnalysisService
 from wsi_analyzer.application.analysis.analysis_session import AnalysisSession
@@ -35,19 +34,23 @@ class AnalysisServiceHandle:
 
 
 class AnalysisServiceFactory:
-    @staticmethod
+    def __init__(self, database, image_server):
+        self._database = database
+        self._image_server = image_server
+
     def create(
+        self,
         svs_path,
         model_path,
     ) -> AnalysisServiceHandle:
-        resolver = AnalysisConfigResolver(container.database)
+        resolver = AnalysisConfigResolver(self._database)
         analysis_config = resolver.resolve(svs_path, model_path)
         logger.info(f"[*] 使用计算设备: {analysis_config.device}, Batch Size: {analysis_config.batch_size}")
         logger.info(f"[*] 正在加载模型: {model_path}")
         adapter = ModelAdapterFactory.create_adapter(model_path)
 
         logger.info(f"[*] 正在打开 WSI 文件: {svs_path}")
-        engine = container.image_server.acquire_engine(svs_path)
+        engine = self._image_server.acquire_engine(svs_path)
 
         target_level = engine.get_best_level_for_mpp(analysis_config.target_mpp)
         target_downsample = engine.slide.level_downsamples[target_level]
@@ -70,5 +73,5 @@ class AnalysisServiceFactory:
 
         return AnalysisServiceHandle(
             slide_path=svs_path, service=service, session=session,
-            adapter=adapter, image_server=container.image_server,
+            adapter=adapter, image_server=self._image_server,
         )
