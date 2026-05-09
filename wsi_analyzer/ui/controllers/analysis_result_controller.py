@@ -1,15 +1,7 @@
 import json
 
-from PySide6.QtCore import QRectF
-from PySide6.QtGui import QColor, QPen
-from PySide6.QtWidgets import QFileDialog, QGraphicsRectItem, QMessageBox
+from PySide6.QtWidgets import QFileDialog, QMessageBox
 
-from wsi_analyzer.config.config import (
-    AI_PEN_COLOR,
-    AI_PEN_WIDTH,
-    IMPORTED_ANNOTATION_COLOR,
-    IMPORTED_ANNOTATION_WIDTH,
-)
 from wsi_analyzer.app.dependency_container import container
 
 
@@ -25,22 +17,8 @@ class AnalysisResultController:
     # ── AI box drawing ─────────────────────────────────────────────
 
     def _draw_ai_boxes(self, results):
-        group = self._layers.ai_layer_group
-        for item in group.childItems():
-            group.removeFromGroup(item)
-            self._viewer.scene_canvas.removeItem(item)
-
-        for data in results:
-            x_min, y_min, x_max, y_max = data["bbox"]
-            rect = QGraphicsRectItem(QRectF(x_min, y_min, x_max - x_min, y_max - y_min))
-            pen = QPen(QColor(*AI_PEN_COLOR))
-            pen.setWidth(AI_PEN_WIDTH)
-            pen.setCosmetic(True)
-            rect.setPen(pen)
-            rect.setToolTip(f"微乳头状癌病灶\n置信度: {data['confidence']:.2%}")
-            group.addToGroup(rect)
-
-        group.setVisible(self._chk_show_ai.isChecked())
+        self._layers.detection.render(results)
+        self._layers.detection.set_visible(self._chk_show_ai.isChecked())
 
     # ── imported annotation drawing ────────────────────────────────
 
@@ -71,35 +49,11 @@ class AnalysisResultController:
             return
 
         w.current_imported_annotations = results
-        self._draw_imported_boxes(results)
+        self._layers.annotation.render(results)
+        self._layers.annotation.set_visible(self._chk_show_ai.isChecked())
         w.statusBar().showMessage(f"已导入 {len(results)} 个标注")
         if hasattr(w, "_update_heatmap_layer"):
-            w._update_heatmap_layer()
-
-    def _draw_imported_boxes(self, results):
-        self._clear_imported_layer()
-        group = self._layers.imported_layer_group
-
-        for data in results:
-            x_min, y_min, x_max, y_max = data["bbox"]
-            rect = QGraphicsRectItem(QRectF(x_min, y_min, x_max - x_min, y_max - y_min))
-            pen = QPen(QColor(*IMPORTED_ANNOTATION_COLOR))
-            pen.setWidth(IMPORTED_ANNOTATION_WIDTH)
-            pen.setCosmetic(True)
-            rect.setPen(pen)
-            rect.setToolTip(
-                f"导入标注: {data.get('class_id', '-')}"
-                f"\n置信度: {data.get('confidence', 0):.2%}"
-            )
-            group.addToGroup(rect)
-
-        group.setVisible(self._chk_show_ai.isChecked())
-
-    def _clear_imported_layer(self):
-        group = self._layers.imported_layer_group
-        for item in group.childItems():
-            group.removeFromGroup(item)
-            self._viewer.scene_canvas.removeItem(item)
+            w.heatmap_controller._update_heatmap_layer()
 
     # ── LOD interaction ────────────────────────────────────────────
 
@@ -129,16 +83,13 @@ class AnalysisResultController:
         if reply != QMessageBox.Yes:
             return
 
-        for item in self._layers.ai_layer_group.childItems():
-            self._layers.ai_layer_group.removeFromGroup(item)
-            self._viewer.scene_canvas.removeItem(item)
-        self._clear_imported_layer()
+        self._layers.clear_ai_items()
         w.current_ai_results = []
         w.current_imported_annotations = []
         self._gallery.clear_gallery()
         self._btn_export.setEnabled(False)
         if hasattr(w, "_clear_heatmap"):
-            w._clear_heatmap()
+            w.heatmap_controller._clear_heatmap()
         w.statusBar().showMessage("已清除分析结果。")
 
     # ── result commit ──────────────────────────────────────────────
@@ -165,7 +116,7 @@ class AnalysisResultController:
 
     def _commit_results(self, results_dict):
         w = self._window
-        w._close_progress_dialog()
+        w.analysis_controller._close_progress_dialog()
 
         results = results_dict.get("results", [])
         status = results_dict.get("status", "completed")
@@ -175,7 +126,7 @@ class AnalysisResultController:
         self._btn_export.setEnabled(len(results) > 0)
 
         if hasattr(w, "_update_heatmap_layer"):
-            w._update_heatmap_layer()
+            w.heatmap_controller._update_heatmap_layer()
 
         if w.current_wsi_path:
             container.database.analysis.save_analysis(

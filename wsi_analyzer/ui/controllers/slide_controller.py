@@ -52,15 +52,14 @@ class SlideController:
 
     def _pre_switch_cleanup(self):
         w = self._window
-        for item in w.ai_layer_group.childItems():
-            w.ai_layer_group.removeFromGroup(item)
-            w.viewer.scene_canvas.removeItem(item)
+        if hasattr(w, "layers"):
+            w.layers.clear_ai_items()
         w.current_ai_results = []
         w.current_imported_annotations = []
-        if hasattr(w, "_clear_imported_layer"):
-            w._clear_imported_layer()
-        if hasattr(w, "_clear_heatmap"):
-            w._clear_heatmap()
+        if hasattr(w, "layers"):
+            w.layers.clear_imported_items()
+        if hasattr(w, "heatmap_controller"):
+            w.heatmap_controller._clear_heatmap()
         if hasattr(w, "btn_export"):
             w.btn_export.setEnabled(False)
         if hasattr(w, "gallery"):
@@ -95,7 +94,7 @@ class SlideController:
                 QMessageBox.Yes | QMessageBox.No,
             )
             if reply == QMessageBox.Yes:
-                w.render_ai_results({"results": results, "status": "completed"})
+                w.result_controller.render_ai_results({"results": results, "status": "completed"})
                 w.statusBar().showMessage(
                     f"已从本地数据库加载 {len(results)} 个病灶。"
                 )

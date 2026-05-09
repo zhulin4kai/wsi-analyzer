@@ -69,7 +69,7 @@ class AnalysisController:
 
         self.ai_thread.progress_updated.connect(self.progress_dialog.setValue)
         self.ai_thread.status_updated.connect(w.statusBar().showMessage)
-        self.ai_thread.analysis_finished.connect(w.render_ai_results)
+        self.ai_thread.analysis_finished.connect(self._result.render_ai_results)
         self.ai_thread.error_occurred.connect(self.handle_ai_error)
         self.ai_thread.finished.connect(lambda: w.btn_analyze.setEnabled(True))
         self.ai_thread.finished.connect(lambda: w.settings_action.setEnabled(True))

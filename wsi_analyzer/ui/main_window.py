@@ -106,12 +106,6 @@ class MainWindow(QMainWindow):
         self.viewer.wsi_loaded.connect(self._on_wsi_loaded)
 
         # cross-controller delegation methods (kept as thin adapters)
-        self._close_progress_dialog = self.analysis_controller._close_progress_dialog
-        self._commit_results = self.result_controller._commit_results
-        self._update_heatmap_layer = self.heatmap_controller._update_heatmap_layer
-        self._clear_heatmap = self.heatmap_controller._clear_heatmap
-        self._clear_imported_layer = self.result_controller._clear_imported_layer
-        self.render_ai_results = self.result_controller.render_ai_results
 
     # ── Toolbar (inline UI builder) ────────────────────────────────
 
