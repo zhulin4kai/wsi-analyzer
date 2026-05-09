@@ -11,11 +11,11 @@ class LayerManager:
     def __init__(self, scene):
         self.scene = scene
 
-        self.heatmap_layer_item = QGraphicsPixmapItem()
-        self.heatmap_layer_item.setZValue(HEATMAP_Z_VALUE)
-        self.heatmap_layer_item.setTransformationMode(Qt.TransformationMode.SmoothTransformation)
-        self.scene.addItem(self.heatmap_layer_item)
-        self.heatmap = HeatmapLayer(self.heatmap_layer_item)
+        heatmap_item = QGraphicsPixmapItem()
+        heatmap_item.setZValue(HEATMAP_Z_VALUE)
+        heatmap_item.setTransformationMode(Qt.TransformationMode.SmoothTransformation)
+        self.scene.addItem(heatmap_item)
+        self.heatmap = HeatmapLayer(heatmap_item)
 
         ai_group = QGraphicsItemGroup()
         ai_group.setZValue(AI_LAYER_Z_VALUE)
@@ -26,10 +26,6 @@ class LayerManager:
         imported_group.setZValue(AI_LAYER_Z_VALUE + 10)
         self.scene.addItem(imported_group)
         self.annotation = AnnotationLayer(imported_group, scene)
-
-        # backward compat aliases
-        self.ai_layer_group = ai_group
-        self.imported_layer_group = imported_group
 
     def set_ai_visible(self, visible: bool):
         self.detection.set_visible(visible)

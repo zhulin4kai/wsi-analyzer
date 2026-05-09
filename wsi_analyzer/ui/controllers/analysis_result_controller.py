@@ -53,8 +53,8 @@ class AnalysisResultController:
         self._layers.annotation.render(results)
         self._layers.annotation.set_visible(self._chk_show_ai.isChecked())
         w.statusBar().showMessage(f"已导入 {len(results)} 个标注")
-        if hasattr(w, "_update_heatmap_layer"):
-            w._update_heatmap_layer()
+        if hasattr(w, "heatmap_controller"):
+            w.heatmap_controller._update_heatmap_layer()
 
     # ── LOD interaction ────────────────────────────────────────────
 
@@ -89,7 +89,7 @@ class AnalysisResultController:
         w.current_imported_annotations = []
         self._gallery.clear_gallery()
         self._btn_export.setEnabled(False)
-        if hasattr(w, "_clear_heatmap"):
+        if hasattr(w, "heatmap_controller"):
             w.heatmap_controller._clear_heatmap()
         w.statusBar().showMessage("已清除分析结果。")
 
@@ -126,7 +126,7 @@ class AnalysisResultController:
         self._draw_ai_boxes(results)
         self._btn_export.setEnabled(len(results) > 0)
 
-        if hasattr(w, "_update_heatmap_layer"):
+        if hasattr(w, "heatmap_controller"):
             w.heatmap_controller._update_heatmap_layer()
 
         if w.current_wsi_path:

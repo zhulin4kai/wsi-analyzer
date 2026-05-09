@@ -48,9 +48,6 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self.viewer)
 
         self.layers = LayerManager(self.viewer.scene_canvas)
-        self.heatmap_layer_item = self.layers.heatmap_layer_item
-        self.ai_layer_group = self.layers.ai_layer_group
-        self.imported_layer_group = self.layers.imported_layer_group
 
         # ── 2. Dock widgets ───────────────────────────────────────
         self._init_dock_widgets()
