@@ -2,6 +2,7 @@ from PySide6.QtCore import QThread, Signal
 
 from wsi_analyzer.config import config
 from wsi_analyzer.app.dependency_container import container
+from wsi_analyzer.application.analysis.analysis_service_factory import AnalysisServiceFactory
 from wsi_analyzer.infrastructure.hardware import HardwareProfiler
 
 
@@ -58,7 +59,7 @@ class AIAnalysisWorker(QThread):
                 patch_size = auto_params.get("patch_size", patch_size)
                 nms_iou_thresh = auto_params.get("nms_iou_thresh", nms_iou_thresh)
 
-            self.analysis_handle = container.create_analysis_service(
+            self.analysis_handle = AnalysisServiceFactory.create(
                 svs_path=self.svs_path,
                 model_path=self.model_path,
                 patch_size=patch_size, stride=stride,
