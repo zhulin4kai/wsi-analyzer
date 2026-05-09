@@ -1,9 +1,6 @@
-import os
-
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QDragEnterEvent, QDropEvent
 from PySide6.QtWidgets import (
-    QFileDialog,
     QMainWindow,
     QMenu,
     QMessageBox,
@@ -12,13 +9,13 @@ from PySide6.QtWidgets import (
 )
 
 from wsi_analyzer.app.dependency_container import container
-from wsi_analyzer.infrastructure.hardware import HardwareProfiler
 from wsi_analyzer.ui.controllers import (
     AnalysisController,
     AnalysisResultController,
     HeatmapController,
     HudController,
     MinimapController,
+    ModelController,
     SlideController,
 )
 from wsi_analyzer.ui.layers import LayerManager
@@ -78,6 +75,8 @@ class MainWindow(QMainWindow):
         self.analysis_controller = AnalysisController(
             self, self.viewer, self.slide_controller, self.result_controller
         )
+
+        self.model_controller = ModelController(self)
 
         # ── 5. Connect signals (controllers now exist) ──────────────
         self._connect_toolbar_signals()
@@ -166,96 +165,16 @@ class MainWindow(QMainWindow):
         self._ai_toolbar = toolbar
 
     def _connect_toolbar_signals(self):
-        self.btn_sel_model.triggered.connect(self.select_model)
+        self.btn_sel_model.triggered.connect(self.model_controller.select_model)
         self.btn_analyze.triggered.connect(self.analysis_controller.start_ai_analysis)
         self.btn_roi_analyze.toggled.connect(self.analysis_controller.toggle_roi_mode)
         self.chk_show_ai.toggled.connect(self.result_controller.toggle_ai_visibility)
-
-    # ── Model selection ────────────────────────────────────────────
-
-    def select_model(self):
-        from wsi_analyzer.infrastructure.persistence.database import DatabaseManager
-
-        file_path, _ = QFileDialog.getOpenFileName(
-            self, "选择 AI 模型", "", "Model Files (*.pt *.pth)"
-        )
-        if not file_path:
-            return
-
-        self.current_model_path = file_path
-        self.btn_sel_model.setText(f"模型: {os.path.basename(file_path)}")
-
-        db = container.database
-        if db.get_auto_tune_enabled() and file_path.endswith(".pt"):
-            self._auto_tune_from_yolo(file_path, db)
-        if self.current_wsi_path:
-            self._update_profile_for_model(file_path, db)
-
-    def _auto_tune_from_yolo(self, file_path: str, db):
-        try:
-            from ultralytics import YOLO
-            model = YOLO(file_path)
-            imgsz = model.model.args.get("imgsz")
-            if isinstance(imgsz, int):
-                db.set_setting("ai_patch_size", imgsz)
-                self.statusBar().showMessage(
-                    f"智能调优: 已根据 YOLO 模型设置 Patch Size = {imgsz}"
-                )
-        except ImportError:
-            self.statusBar().showMessage(
-                "提示: 当前环境未安装 ultralytics，无法从 .pt 文件读取模型参数。"
-            )
-        except Exception:
-            pass
-
-    def _update_profile_for_model(self, file_path: str, db):
-        from wsi_analyzer.infrastructure.hardware.profiler import HardwareProfiler
-
-        drive_prefix = HardwareProfiler.get_storage_key(self.current_wsi_path)
-        profile = db.get_system_profile(drive_prefix)
-        if not (profile and "io_speed" in profile):
-            return
-
-        model_size_mb = os.path.getsize(file_path) / (1024 * 1024)
-        device = profile.get("device", HardwareProfiler.get_compute_device())
-        _, free_vram = HardwareProfiler.get_vram_info(device)
-        new_params = HardwareProfiler.calculate_optimal_params(
-            profile["io_speed"], free_vram, model_size_mb
-        )
-        profile["batch_size"] = new_params["batch_size"]
-        profile["tile_cache_limit"] = new_params["tile_cache_limit"]
-        db.save_system_profile(drive_prefix, profile)
-
-        self.statusBar().showMessage(
-            f"模型已切换: {os.path.basename(file_path)} | "
-            f"模型大小: {model_size_mb:.1f}MB | "
-            f"自动调整 Batch Size 至: {new_params['batch_size']}"
-        )
-
-    # ── Dock widgets ───────────────────────────────────────────────
-
-    def _init_dock_widgets(self):
-        self.image_list_panel = ImageListPanel(self)
-        self.addDockWidget(Qt.LeftDockWidgetArea, self.image_list_panel)
-
-        self.gallery = LesionGallery(parent=self)
-        self.gallery.navigate_requested.connect(self._navigate_to_lesion)
-        self.gallery.hide()
-        self.addDockWidget(Qt.RightDockWidgetArea, self.gallery)
-
-    def _connect_dock_signals(self):
-        self.image_list_panel.image_load_requested.connect(
-            self.slide_controller._load_wsi_at_path
-        )
-        self.image_list_panel.add_requested.connect(
-            self.slide_controller.add_images_to_list
-        )
 
     # ── Event handlers ─────────────────────────────────────────────
 
     def open_settings(self):
         from PySide6.QtWidgets import QDialog
-        from dialogs import SettingsDialog
+        from wsi_analyzer.ui.dialogs import SettingsDialog
 
         dlg = SettingsDialog(self, current_wsi_path=self.current_wsi_path)
         if dlg.exec() == QDialog.Accepted:

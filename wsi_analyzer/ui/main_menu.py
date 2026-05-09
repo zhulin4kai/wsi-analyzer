@@ -174,7 +174,7 @@ class MainMenuBuilder:
         analyze_menu.addSeparator()
 
         model_action = analyze_menu.addAction("选择模型权重")
-        model_action.triggered.connect(window.select_model)
+        model_action.triggered.connect(window.model_controller.select_model)
 
         analyze_menu.addSeparator()
 

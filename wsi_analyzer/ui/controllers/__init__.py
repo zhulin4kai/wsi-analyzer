@@ -3,9 +3,10 @@ from .analysis_result_controller import AnalysisResultController
 from .heatmap_controller import HeatmapController
 from .hud_controller import HudController
 from .minimap_controller import MinimapController
+from .model_controller import ModelController
 from .slide_controller import SlideController
 
 __all__ = [
     "AnalysisController", "AnalysisResultController", "HeatmapController",
-    "HudController", "MinimapController", "SlideController",
+    "HudController", "MinimapController", "ModelController", "SlideController",
 ]
