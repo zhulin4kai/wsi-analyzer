@@ -23,7 +23,7 @@ def _show_about(window):
         "专用于微乳头状癌病灶自动检测与分析。<br><br>"
         "<b>技术栈</b><br>"
         "Python &nbsp;·&nbsp; PySide6 &nbsp;·&nbsp; OpenSlide "
-        "&nbsp;·&nbsp; PyTorch &nbsp;·&nbsp; Ultralytics YOLO<br><br>"
+        "&nbsp;·&nbsp; PyTorch &nbsp;·&nbsp; ultralytics YOLO<br><br>"
         "© 2024 &nbsp; WSIAnalyzer",
     )
 

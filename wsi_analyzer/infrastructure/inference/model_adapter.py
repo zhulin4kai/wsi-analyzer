@@ -1,11 +1,9 @@
 import abc
-import os
 from typing import Any, List, Tuple
 
 import numpy as np
 from PIL import Image
 
-from wsi_analyzer.infrastructure.logging.logger import logger
 
 try:
     from ultralytics import YOLO as _YOLO
