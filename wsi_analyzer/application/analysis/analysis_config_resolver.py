@@ -1,7 +1,7 @@
 import os
 
 from wsi_analyzer.config import config
-from wsi_analyzer.application.analysis.analysis_config import AnalysisConfig
+from wsi_analyzer.application.analysis.analysis_config import InferenceScaleConfig
 from wsi_analyzer.application.analysis.auto_tune_service import AutoTuneService
 from wsi_analyzer.infrastructure.hardware import HardwareProfiler
 
@@ -10,7 +10,7 @@ class AnalysisConfigResolver:
     def __init__(self, db):
         self._db = db
 
-    def resolve(self, svs_path: str, model_path: str) -> AnalysisConfig:
+    def resolve(self, svs_path: str, model_path: str) -> InferenceScaleConfig:
         patch_size = self._db.get_setting("ai_patch_size", config.AI_PATCH_SIZE)
         stride = self._db.get_setting("ai_stride", config.AI_STRIDE)
         nms_iou_thresh = self._db.get_setting("ai_nms_iou_thresh", config.AI_NMS_IOU_THRESH)
@@ -27,7 +27,7 @@ class AnalysisConfigResolver:
             device = HardwareProfiler.get_compute_device()
             batch_size = 16
 
-        analysis_config = AnalysisConfig.from_raw(
+        analysis_config = InferenceScaleConfig.from_raw(
             patch_size=patch_size, stride=stride,
             nms_iou_thresh=nms_iou_thresh, conf_thresh=conf_thresh,
             device=device, batch_size=batch_size, target_mpp=target_mpp,

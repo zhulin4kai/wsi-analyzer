@@ -2,9 +2,9 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
-class AnalysisConfig:
-    patch_size: int
-    stride: int
+class InferenceScaleConfig:
+    model_input_size: int
+    level0_stride: int
     nms_iou_thresh: float
     conf_thresh: float
     device: str
@@ -32,8 +32,8 @@ class AnalysisConfig:
         batch_cap: int = 64,
     ):
         return cls(
-            patch_size=max(patch_size_min, min(patch_size, patch_size_max)),
-            stride=max(stride_min, min(stride, stride_max)),
+            model_input_size=max(patch_size_min, min(patch_size, patch_size_max)),
+            level0_stride=max(stride_min, min(stride, stride_max)),
             nms_iou_thresh=max(iou_min, min(nms_iou_thresh, iou_max)),
             conf_thresh=max(conf_min, min(conf_thresh, conf_max)),
             device=device,

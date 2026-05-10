@@ -29,7 +29,7 @@ class PatchPlanner:
                     coords.append(PatchCoordinate(
                         x=x, y=y,
                         size=self.patch_size,
-                        level=target_level,
-                        downsample=target_downsample,
+                        read_level=target_level,
+                        read_level_downsample=target_downsample,
                     ))
         return coords

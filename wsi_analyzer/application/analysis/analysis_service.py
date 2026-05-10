@@ -1,7 +1,7 @@
 import numpy as np
 from typing import Optional
 
-from wsi_analyzer.application.analysis.analysis_config import AnalysisConfig
+from wsi_analyzer.application.analysis.analysis_config import InferenceScaleConfig
 from wsi_analyzer.application.analysis.analysis_session import AnalysisSession
 from wsi_analyzer.application.analysis.coordinate_service import AnalysisCoordinateService
 from wsi_analyzer.application.analysis.result_builder import AnalysisResultBuilder
@@ -16,7 +16,7 @@ class FullSlideAnalysisService:
         self,
         coordinate_service: AnalysisCoordinateService,
         inferencer: BatchInferencer,
-        config: AnalysisConfig,
+        config: InferenceScaleConfig,
         session: AnalysisSession,
     ):
         self._coordinate_service = coordinate_service
@@ -84,7 +84,7 @@ class FullSlideAnalysisService:
         if resume_data and resume_data.get("valid_coords"):
             valid_coords_for_result = list(raw_coords)
             patch_coords = [
-                PatchCoordinate(x=c[0], y=c[1], size=0, level=0, downsample=0)  # type: ignore[index]
+                PatchCoordinate(x=c[0], y=c[1], size=0, read_level=0, read_level_downsample=0)  # type: ignore[index]
                 for c in raw_coords
             ]
         else:

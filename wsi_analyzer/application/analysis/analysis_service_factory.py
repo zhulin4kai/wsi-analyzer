@@ -55,7 +55,7 @@ class AnalysisServiceFactory:
         slide_port = OpenSlideReadAdapter(engine)
         target_level, target_downsample = slide_port.resolve_target_level(analysis_config.target_mpp)
 
-        reader = PatchReader(engine, target_level, target_downsample, analysis_config.patch_size)
+        reader = PatchReader(engine, target_level, target_downsample, analysis_config.model_input_size)
         inferencer = BatchInferencer(adapter, reader, analysis_config.device, analysis_config.batch_size, analysis_config.conf_thresh)
 
         session = AnalysisSession(analysis_config)

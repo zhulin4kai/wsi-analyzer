@@ -50,21 +50,21 @@ class TestLevel0Box:
 
 class TestPatchCoordinate:
     def test_create(self):
-        pc = PatchCoordinate(x=512, y=1024, size=512, level=0, downsample=1.0)
+        pc = PatchCoordinate(x=512, y=1024, size=512, read_level=0, read_level_downsample=1.0)
         assert pc.x == 512
         assert pc.y == 1024
         assert pc.size == 512
-        assert pc.level == 0
-        assert pc.downsample == 1.0
+        assert pc.read_level == 0
+        assert pc.read_level_downsample == 1.0
 
     def test_level0_offset(self):
-        pc = PatchCoordinate(x=0, y=0, size=256, level=2, downsample=4.0)
+        pc = PatchCoordinate(x=0, y=0, size=256, read_level=2, read_level_downsample=4.0)
         # The Level-0 physical extent
         assert pc.level0_width() == 1024.0
         assert pc.level0_height() == 1024.0
 
     def test_immutable(self):
-        pc = PatchCoordinate(x=0, y=0, size=512, level=0, downsample=1.0)
+        pc = PatchCoordinate(x=0, y=0, size=512, read_level=0, read_level_downsample=1.0)
         try:
             setattr(pc, 'x', 99)
             assert False, "should raise"

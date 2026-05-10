@@ -36,15 +36,15 @@ class PatchCoordinate:
     x: int
     y: int
     size: int
-    level: int
-    downsample: float
+    read_level: int
+    read_level_downsample: float
 
     @property
     def level0_origin(self) -> tuple:
         return self.x, self.y
 
     def level0_width(self) -> float:
-        return self.size * self.downsample
+        return self.size * self.read_level_downsample
 
     def level0_height(self) -> float:
-        return self.size * self.downsample
+        return self.size * self.read_level_downsample

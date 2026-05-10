@@ -11,7 +11,7 @@ class ImageServer:
 
     def __init__(self):
         self._slide_pool = SlidePool(max_engines=3)
-        self._tile_cache = TileDataCache(max_capacity=2000)
+        self._tile_cache = TileDataCache(max_capacity=2048)
         self._metadata_service = MetadataService(self._slide_pool)
 
     @classmethod

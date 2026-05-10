@@ -1,9 +1,9 @@
-from wsi_analyzer.application.analysis.analysis_config import AnalysisConfig
+from wsi_analyzer.application.analysis.analysis_config import InferenceScaleConfig
 from wsi_analyzer.domain.slide.coordinates import PatchCoordinate
 
 
 class AnalysisSession:
-    def __init__(self, config: AnalysisConfig):
+    def __init__(self, config: InferenceScaleConfig):
         self.config = config
         self._cancelled = False
         self._valid_coords: list[PatchCoordinate] = []

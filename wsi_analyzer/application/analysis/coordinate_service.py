@@ -20,7 +20,7 @@ class AnalysisCoordinateService:
         level, dim, ds = self._slide_port.get_level_info(3)
         mask = self._mask_generator.generate(self._slide_port.read_thumbnail_rgb(level))
 
-        planner = PatchPlanner(self._config.patch_size, self._config.stride)
+        planner = PatchPlanner(self._config.model_input_size, self._config.level0_stride)
         return planner.plan(
             solid_mask=mask,
             level_0_dim=self._slide_port.level0_dimensions,
@@ -35,8 +35,8 @@ class AnalysisCoordinateService:
         level, dim, ds = self._slide_port.get_level_info(3)
         mask = self._mask_generator.generate(self._slide_port.read_thumbnail_rgb(level))
 
-        roi_stride = int(self._config.patch_size * 0.5)
-        planner = ROIPlanner(self._config.patch_size, roi_stride)
+        roi_stride = int(self._config.model_input_size * 0.5)
+        planner = ROIPlanner(self._config.model_input_size, roi_stride)
         return planner.plan(
             roi_bbox=roi_bbox,
             level_0_dim=self._slide_port.level0_dimensions,

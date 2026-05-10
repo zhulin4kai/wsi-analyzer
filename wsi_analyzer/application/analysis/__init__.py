@@ -1,4 +1,4 @@
-from .analysis_config import AnalysisConfig
+from .analysis_config import InferenceScaleConfig
 from .analysis_config_resolver import AnalysisConfigResolver
 from .analysis_request import AnalysisRequest
 from .analysis_service import FullSlideAnalysisService
@@ -9,7 +9,7 @@ from .coordinate_service import AnalysisCoordinateService
 from .result_builder import AnalysisResultBuilder
 
 __all__ = [
-    "AnalysisConfig", "AnalysisConfigResolver", "AnalysisRequest",
+    "InferenceScaleConfig", "AnalysisConfigResolver", "AnalysisRequest",
     "AnalysisServiceFactory", "AnalysisSession",
     "AutoTuneService", "AnalysisCoordinateService",
     "AnalysisResultBuilder", "FullSlideAnalysisService",
