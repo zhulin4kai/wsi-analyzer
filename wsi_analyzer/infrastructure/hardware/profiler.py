@@ -47,7 +47,7 @@ class HardwareProfiler:
                 import pynvml
                 pynvml.nvmlInit()
                 handle = pynvml.nvmlDeviceGetHandleByIndex(0)
-                info = pynvml.nvmlMemoryInfo(handle)  # type: ignore[attr-defined]
+                info = pynvml.nvmlDeviceGetMemoryInfo(handle)
                 total_mb = info.total / (1024 * 1024)
                 free_mb = info.free / (1024 * 1024)
                 pynvml.nvmlShutdown()
