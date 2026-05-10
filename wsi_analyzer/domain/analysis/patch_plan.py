@@ -16,10 +16,10 @@ class PatchPlanner:
         target_level: int = 0,
         target_downsample: float = 1.0,
     ) -> list[PatchCoordinate]:
-        W, H = level_0_dim
+        w, h = level_0_dim
         coords = []
-        for y in range(0, H - self.patch_size + 1, self.stride):
-            for x in range(0, W - self.patch_size + 1, self.stride):
+        for y in range(0, h - self.patch_size + 1, self.stride):
+            for x in range(0, w - self.patch_size + 1, self.stride):
                 cx = x + self.patch_size / 2
                 cy = y + self.patch_size / 2
                 mx = min(max(int(cx / downsample_factor), 0), solid_mask.shape[1] - 1)

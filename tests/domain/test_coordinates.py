@@ -10,7 +10,7 @@ class TestLevel0Point:
     def test_immutable(self):
         p = Level0Point(0, 0)
         try:
-            p.x = 1
+            setattr(p, 'x', 1)
             assert False, "should raise"
         except Exception:
             pass
@@ -32,7 +32,7 @@ class TestLevel0Box:
     def test_immutable(self):
         b = Level0Box(0, 0, 1, 1)
         try:
-            b.x1 = 99
+            setattr(b, 'x1', 99)
             assert False, "should raise"
         except Exception:
             pass
@@ -64,7 +64,7 @@ class TestPatchCoordinate:
     def test_immutable(self):
         pc = PatchCoordinate(x=0, y=0, size=512, level=0, downsample=1.0)
         try:
-            pc.x = 99
+            setattr(pc, 'x', 99)
             assert False, "should raise"
         except Exception:
             pass

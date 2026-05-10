@@ -16,7 +16,7 @@ class TestDetection:
     def test_immutable(self):
         d = Detection(bbox=Level0Box(0, 0, 1, 1), confidence=0.5, class_id=0)
         try:
-            d.confidence = 1.0
+            setattr(d, 'confidence', 1.0)
             assert False, "should raise"
         except Exception:
             pass

@@ -15,12 +15,12 @@ class ROIPlanner:
         target_level: int = 0,
         target_downsample: float = 1.0,
     ) -> list[PatchCoordinate]:
-        W, H = level_0_dim
+        w, h = level_0_dim
         x_min, y_min, x_max, y_max = roi_bbox
         x_min = max(0, int(x_min))
         y_min = max(0, int(y_min))
-        x_max = min(W, int(x_max))
-        y_max = min(H, int(y_max))
+        x_max = min(w, int(x_max))
+        y_max = min(h, int(y_max))
 
         if x_min >= x_max or y_min >= y_max:
             return []
@@ -29,8 +29,8 @@ class ROIPlanner:
         coords = []
         for y in range(y_min, y_max, self.stride):
             for x in range(x_min, x_max, self.stride):
-                cx = min(x, W - self.patch_size) if x + self.patch_size > W else x
-                cy = min(y, H - self.patch_size) if y + self.patch_size > H else y
+                cx = min(x, w - self.patch_size) if x + self.patch_size > w else x
+                cy = min(y, h - self.patch_size) if y + self.patch_size > h else y
                 cx = max(0, cx)
                 cy = max(0, cy)
 
