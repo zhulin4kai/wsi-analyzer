@@ -25,11 +25,11 @@ def setup_logger():
 
     log_file = os.path.join(log_dir, "wsi_analyzer.log")
 
-    logger = logging.getLogger("WSIAnalyzer")
-    logger.setLevel(logging.DEBUG)
+    _logger = logging.getLogger("WSIAnalyzer")
+    _logger.setLevel(logging.DEBUG)
 
-    if logger.handlers:
-        return logger
+    if _logger.handlers:
+        return _logger
 
     formatter = logging.Formatter(
         fmt="%(asctime)s [%(levelname)s] %(filename)s:%(lineno)d - %(message)s",
@@ -46,18 +46,18 @@ def setup_logger():
     console_handler.setLevel(logging.DEBUG)
     console_handler.setFormatter(formatter)
 
-    logger.addHandler(file_handler)
-    logger.addHandler(console_handler)
+    _logger.addHandler(file_handler)
+    _logger.addHandler(console_handler)
 
     def handle_exception(exc_type, exc_value, exc_traceback):
         if issubclass(exc_type, KeyboardInterrupt):
             sys.__excepthook__(exc_type, exc_value, exc_traceback)
             return
-        logger.critical("发生未捕获异常", exc_info=(exc_type, exc_value, exc_traceback))
+        _logger.critical("发生未捕获异常", exc_info=(exc_type, exc_value, exc_traceback))
 
     sys.excepthook = handle_exception
 
-    return logger
+    return _logger
 
 
 logger = setup_logger()

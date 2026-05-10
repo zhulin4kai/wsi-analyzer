@@ -1,5 +1,7 @@
 # wsi_analyzer/app/bootstrap.py
 
+from __future__ import annotations
+
 import os
 import sys
 import multiprocessing

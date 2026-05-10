@@ -162,7 +162,8 @@ class ImageListPanel(QDockWidget):
             if os.path.exists(path):
                 QThreadPool.globalInstance().start(PreloadTask(path), -1)
 
-    def _on_selection_changed(self, current, _previous):
+    @staticmethod
+    def _on_selection_changed(current, _previous):
         """单击或键盘切换选中项时，后台预热引擎（消除首帧延迟）。"""
         if current is None:
             return
