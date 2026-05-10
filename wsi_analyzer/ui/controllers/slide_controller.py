@@ -23,7 +23,7 @@ class SlideController:
             self._window, "选择病理切片", "", "WSI Files (*.svs *.tif *.ndpi)"
         )
         if file_path:
-            self._load_wsi_at_path(file_path)
+            self.load_wsi_at_path(file_path)
             if self._image_list_panel:
                 self._image_list_panel.add_image(file_path)
 
@@ -34,7 +34,7 @@ class SlideController:
         if paths and self._image_list_panel:
             self._image_list_panel.add_images(paths)
 
-    def _load_wsi_at_path(self, file_path):
+    def load_wsi_at_path(self, file_path):
         if self._is_loading_wsi:
             return
         self._is_loading_wsi = True
@@ -59,7 +59,7 @@ class SlideController:
         if hasattr(w, "layers"):
             w.layers.clear_imported_items()
         if hasattr(w, "heatmap_controller"):
-            w.heatmap_controller._clear_heatmap()
+            w.heatmap_controller.clear_heatmap()
         if hasattr(w, "btn_export"):
             w.btn_export.setEnabled(False)
         if hasattr(w, "gallery"):

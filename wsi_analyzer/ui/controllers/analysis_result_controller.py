@@ -55,7 +55,7 @@ class AnalysisResultController:
         self._layers.annotation.set_visible(self._chk_show_ai.isChecked())
         w.statusBar().showMessage(f"已导入 {len(results)} 个标注")
         if hasattr(w, "heatmap_controller"):
-            w.heatmap_controller._update_heatmap_layer()
+            w.heatmap_controller.update_heatmap_layer()
 
     # ── LOD interaction ────────────────────────────────────────────
 
@@ -91,7 +91,7 @@ class AnalysisResultController:
         self._gallery.clear_gallery()
         self._btn_export.setEnabled(False)
         if hasattr(w, "heatmap_controller"):
-            w.heatmap_controller._clear_heatmap()
+            w.heatmap_controller.clear_heatmap()
         w.statusBar().showMessage("已清除分析结果。")
 
     # ── result commit ──────────────────────────────────────────────
@@ -116,7 +116,7 @@ class AnalysisResultController:
 
     def _commit_results(self, result: AnalysisResult, results=None):
         w = self._window
-        w.analysis_controller._close_progress_dialog()
+        w.analysis_controller.close_progress_dialog()
 
         if results is None:
             results = result.to_dict()["results"]
@@ -128,7 +128,7 @@ class AnalysisResultController:
         self._btn_export.setEnabled(len(results) > 0)
 
         if hasattr(w, "heatmap_controller"):
-            w.heatmap_controller._update_heatmap_layer()
+            w.heatmap_controller.update_heatmap_layer()
 
         if w.current_wsi_path:
             d = result.to_dict()

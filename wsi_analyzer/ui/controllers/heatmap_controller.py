@@ -48,7 +48,7 @@ class HeatmapController:
         else:
             self._layers.heatmap.set_opacity(0.4)
 
-    def _update_heatmap_layer(self):
+    def update_heatmap_layer(self):
         w = self._window
         layers = self._layers
 
@@ -58,7 +58,7 @@ class HeatmapController:
             results.extend(w.current_imported_annotations)
 
         if not results:
-            self._clear_heatmap()
+            self.clear_heatmap()
             return
 
         md = self._viewer.current_metadata
@@ -73,7 +73,7 @@ class HeatmapController:
         self._update_minimap_heatmap(rgba)
         self._viewer.viewport().update()
 
-    def _clear_heatmap(self):
+    def clear_heatmap(self):
         self._layers.heatmap.clear()
         m = self._minimap
         if m and hasattr(m, "heatmap_mini_item"):

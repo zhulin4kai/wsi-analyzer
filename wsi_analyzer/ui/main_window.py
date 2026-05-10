@@ -115,7 +115,7 @@ class MainWindow(QMainWindow):
 
     def _connect_dock_signals(self):
         self.image_list_panel.image_load_requested.connect(
-            self.slide_controller._load_wsi_at_path
+            self.slide_controller.load_wsi_at_path
         )
         self.image_list_panel.add_requested.connect(
             self.slide_controller.add_images_to_list
@@ -232,4 +232,4 @@ class MainWindow(QMainWindow):
         if hasattr(self, "image_list_panel"):
             self.image_list_panel.add_images(paths)
         if paths:
-            self.slide_controller._load_wsi_at_path(paths[0])
+            self.slide_controller.load_wsi_at_path(paths[0])

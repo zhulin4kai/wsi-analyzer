@@ -170,7 +170,7 @@ class AnalysisController:
         self._is_canceling = False
 
     def handle_ai_error(self, err_msg):
-        self._close_progress_dialog()
+        self.close_progress_dialog()
         if hasattr(self._viewer, "clear_roi_box"):
             self._viewer.clear_roi_box()
         self._window.statusBar().showMessage("分析失败或被中断。")
@@ -178,7 +178,7 @@ class AnalysisController:
 
     # ── internal ───────────────────────────────────────────────────
 
-    def _close_progress_dialog(self):
+    def close_progress_dialog(self):
         if not self.progress_dialog:
             return
         try:
@@ -190,7 +190,7 @@ class AnalysisController:
 
     def _on_roi_finished(self, result):
         w = self._window
-        self._close_progress_dialog()
+        self.close_progress_dialog()
         self._viewer.clear_roi_box()
 
         if result.status == "interrupted":
