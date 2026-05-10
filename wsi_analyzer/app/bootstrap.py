@@ -16,7 +16,7 @@ from wsi_analyzer.ui.main_window import MainWindow
 
 def run_qt_app(
     ready_event: multiprocessing.Event,
-    msg_queue: multiprocessing.Queue,
+    msg_queue: multiprocessing.Queue[str],
 ) -> None:
     msg_queue.put("正在加载核心框架...")
 
