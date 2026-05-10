@@ -186,27 +186,28 @@ class ReportExporter:
 
             if geom.get("type") == "Polygon":
                 coords = geom.get("coordinates", [[]])[0]
-                if coords:
-                    xs = [p[0] for p in coords]
-                    ys = [p[1] for p in coords]
-                    results.append({
-                        "bbox": [min(xs), min(ys), max(xs), max(ys)],
-                        "confidence": confidence,
-                        "class_id": class_id,
-                        "source": "imported",
-                    })
+                item = _coords_to_result(coords, confidence, class_id)
+                if item:
+                    results.append(item)
 
             elif geom.get("type") == "MultiPolygon":
                 for polygon in geom.get("coordinates", []):
                     coords = polygon[0] if polygon else []
-                    if coords:
-                        xs = [p[0] for p in coords]
-                        ys = [p[1] for p in coords]
-                        results.append({
-                            "bbox": [min(xs), min(ys), max(xs), max(ys)],
-                            "confidence": confidence,
-                            "class_id": class_id,
-                            "source": "imported",
-                        })
+                    item = _coords_to_result(coords, confidence, class_id)
+                    if item:
+                        results.append(item)
 
         return results
+
+
+def _coords_to_result(coords, confidence, class_id):
+    if not coords:
+        return None
+    xs = [p[0] for p in coords]
+    ys = [p[1] for p in coords]
+    return {
+        "bbox": [min(xs), min(ys), max(xs), max(ys)],
+        "confidence": confidence,
+        "class_id": class_id,
+        "source": "imported",
+    }

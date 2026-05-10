@@ -53,7 +53,7 @@ def _configure_windows_app_id() -> None:
 
 
 def _configure_app_icon(app: QApplication) -> None:
-    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # type: ignore[type-var]
     icon_path = os.path.join(base_dir, "assets", "app_icon.ico")
     if not os.path.exists(icon_path):
         icon_path = os.path.join(base_dir, "app_icon.ico")

@@ -30,7 +30,7 @@ class HardwareProfiler:
             if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
                 return "mps"
         except ImportError:
-            torch: None = None
+            pass
         return "cpu"
 
     @staticmethod
@@ -47,7 +47,7 @@ class HardwareProfiler:
                 import pynvml
                 pynvml.nvmlInit()
                 handle = pynvml.nvmlDeviceGetHandleByIndex(0)
-                info = pynvml.nvmlMemoryInfo(handle)
+                info = pynvml.nvmlMemoryInfo(handle)  # type: ignore[attr-defined]
                 total_mb = info.total / (1024 * 1024)
                 free_mb = info.free / (1024 * 1024)
                 pynvml.nvmlShutdown()

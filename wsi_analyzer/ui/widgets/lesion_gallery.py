@@ -65,7 +65,7 @@ class LesionGallery(QDockWidget):
     def __init__(self, parent=None):
         super().__init__("病灶画廊 (Top 50)", parent)
         # 设置允许停靠区域
-        self.setAllowedAreas(
+        self.setAllowedAreas(  # type: ignore[arg-type]
             Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea | Qt.DockWidgetArea.BottomDockWidgetArea
         )
 
@@ -73,7 +73,7 @@ class LesionGallery(QDockWidget):
         self.setMinimumWidth(320)
 
         # 停靠时不显示关闭按钮，浮动时显示
-        self.setFeatures(
+        self.setFeatures(  # type: ignore[arg-type]
             QDockWidget.DockWidgetFeature.DockWidgetFloatable | QDockWidget.DockWidgetFeature.DockWidgetMovable
         )
         self.topLevelChanged.connect(self._on_top_level_changed)
@@ -93,13 +93,13 @@ class LesionGallery(QDockWidget):
     def _on_top_level_changed(self, floating: bool):
         """悬浮时显示关闭按钮，停靠时隐藏关闭按钮"""
         if floating:
-            self.setFeatures(
+            self.setFeatures(  # type: ignore[arg-type]
                 QDockWidget.DockWidgetFeature.DockWidgetFloatable
                 | QDockWidget.DockWidgetFeature.DockWidgetMovable
                 | QDockWidget.DockWidgetFeature.DockWidgetClosable
             )
         else:
-            self.setFeatures(
+            self.setFeatures(  # type: ignore[arg-type]
                 QDockWidget.DockWidgetFeature.DockWidgetFloatable | QDockWidget.DockWidgetFeature.DockWidgetMovable
             )
 

@@ -85,13 +85,7 @@ class MinimapView(QGraphicsView):
         max_size = _BASE_SIZE * self._size_scale
         img_w, img_h = thumb_img.width, thumb_img.height
 
-        if img_w > img_h:
-            target_w = int(max_size)
-            target_h = int(max_size * (img_h / img_w))
-        else:
-            target_h = int(max_size)
-            target_w = int(max_size * (img_w / img_h))
-
+        target_w, target_h = self._aspect_fit(img_w, img_h, max_size)
         self.setFixedSize(target_w, target_h)
 
         self.scene_canvas.setSceneRect(0, 0, img_w, img_h)
@@ -151,6 +145,11 @@ class MinimapView(QGraphicsView):
 
         self.indicator.setRect(x, y, w, h)
         self.viewport().update()
+
+    def _aspect_fit(self, img_w: int, img_h: int, max_size: float) -> tuple[int, int]:
+        if img_w > img_h:
+            return int(max_size), int(max_size * (img_h / img_w))
+        return int(max_size * (img_w / img_h)), int(max_size)
 
     def mousePressEvent(self, event):
         """鹰眼图鼠标按下：记录拖拽起点并发射轻量导航信号"""

@@ -52,4 +52,4 @@ class AIAnalysisWorker(QThread):
             self.error_occurred.emit(f"AI 引擎异常: {str(e)}")
         finally:
             if self.analysis_handle is not None:
-                self.analysis_handle.close()
+                self.analysis_handle.close()  # type: ignore[union-attr]

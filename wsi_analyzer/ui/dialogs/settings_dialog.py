@@ -207,7 +207,7 @@ class SettingsDialog(QDialog):
         mag_options = getattr(config, "AI_MAG_OPTIONS", {})
         mpp_val = mag_options.get(label)
         if mpp_val is not None:
-            self.spin_mpp.setValue(mpp_val)
+            self.spin_mpp.setValue(float(mpp_val))
             self.spin_mpp.setVisible(False)
         else:
             self.spin_mpp.setVisible(True)

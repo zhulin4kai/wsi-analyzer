@@ -31,11 +31,11 @@ class ImageListPanel(QDockWidget):
 
     def __init__(self, parent=None):
         super().__init__("切片列表", parent)
-        self.setAllowedAreas(Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea)
+        self.setAllowedAreas(Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea)  # type: ignore[arg-type]
         self.setMinimumWidth(200)
 
         # 停靠时不显示关闭按钮，浮动时显示
-        self.setFeatures(
+        self.setFeatures(  # type: ignore[arg-type]
             QDockWidget.DockWidgetFeature.DockWidgetFloatable | QDockWidget.DockWidgetFeature.DockWidgetMovable
         )
         self.topLevelChanged.connect(self._on_top_level_changed)
@@ -85,13 +85,13 @@ class ImageListPanel(QDockWidget):
     def _on_top_level_changed(self, floating: bool):
         """悬浮时显示关闭按钮，停靠时隐藏关闭按钮"""
         if floating:
-            self.setFeatures(
+            self.setFeatures(  # type: ignore[arg-type]
                 QDockWidget.DockWidgetFeature.DockWidgetFloatable
                 | QDockWidget.DockWidgetFeature.DockWidgetMovable
                 | QDockWidget.DockWidgetFeature.DockWidgetClosable
             )
         else:
-            self.setFeatures(
+            self.setFeatures(  # type: ignore[arg-type]
                 QDockWidget.DockWidgetFeature.DockWidgetFloatable | QDockWidget.DockWidgetFeature.DockWidgetMovable
             )
 
@@ -132,7 +132,7 @@ class ImageListPanel(QDockWidget):
                 from PySide6.QtCore import QThreadPool
                 from wsi_analyzer.workers import PreloadTask
 
-                QThreadPool.globalInstance().start(PreloadTask(first_new), -1)
+                QThreadPool.globalInstance().start(PreloadTask(str(first_new)), -1)  # type: ignore[arg-type]
 
     def highlight(self, file_path: str):
         """在列表中高亮显示指定路径对应的项。"""

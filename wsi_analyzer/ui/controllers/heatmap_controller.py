@@ -97,7 +97,7 @@ class HeatmapController:
         if extra_sigma > 0:
             k = int(math.ceil(3.0 * extra_sigma)) * 2 + 1
             k = max(3, k)
-            k = min(k, max(3, min(mini_h, mini_w) // 2 * 2 - 1))
+            k = min(k, max(3, int(min(mini_h, mini_w)) // 2 * 2 - 1))
             mini_rgba[:, :, :3] = cv2.GaussianBlur(mini_rgba[:, :, :3], (k, k), extra_sigma)
             mini_rgba[:, :, 3] = cv2.GaussianBlur(mini_rgba[:, :, 3], (k, k), extra_sigma)
 

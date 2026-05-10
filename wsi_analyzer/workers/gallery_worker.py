@@ -62,7 +62,7 @@ class GalleryWorker(QThread):
 
                 # 动态计算上下文大小
                 bw, bh = b[2] - b[0], b[3] - b[1]
-                dynamic_context = int(max(self.target_size, int(max(bw, bh) * 1.5)))
+                dynamic_context = int(max(self.target_size, int(max(bw, bh) * 1.5)))  # type: ignore[type-var]
 
                 # 计算截取区域左上角，使病灶位于截取框中心
                 start_x = max(0, int(cx - dynamic_context / 2))

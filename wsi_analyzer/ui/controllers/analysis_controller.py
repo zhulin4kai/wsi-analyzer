@@ -51,14 +51,7 @@ class AnalysisController:
         w.settings_action.setEnabled(False)
         w.btn_export.setEnabled(False)
 
-        self.progress_dialog = QProgressDialog(
-            "正在进行全片 AI 检测...", "取消", 0, 100, w
-        )
-        self.progress_dialog.setWindowTitle("分析进度")
-        self.progress_dialog.setWindowModality(Qt.WindowModality.NonModal)
-        self.progress_dialog.setAutoClose(False)
-        self.progress_dialog.setAutoReset(False)
-        self.progress_dialog.setValue(0)
+        self.progress_dialog = self._create_progress_dialog("正在进行全片 AI 检测...")
         self.progress_dialog.canceled.connect(self.cancel_ai_analysis)
 
         self.ai_thread = AIAnalysisWorker(
@@ -102,14 +95,7 @@ class AnalysisController:
         w.settings_action.setEnabled(False)
         w.btn_export.setEnabled(False)
 
-        self.progress_dialog = QProgressDialog(
-            "正在进行局部 ROI AI 检测...", "取消", 0, 100, w
-        )
-        self.progress_dialog.setWindowTitle("分析进度")
-        self.progress_dialog.setWindowModality(Qt.WindowModality.NonModal)
-        self.progress_dialog.setAutoClose(False)
-        self.progress_dialog.setAutoReset(False)
-        self.progress_dialog.setValue(0)
+        self.progress_dialog = self._create_progress_dialog("正在进行局部 ROI AI 检测...")
         self.progress_dialog.canceled.connect(self.cancel_ai_analysis)
 
         self.ai_thread = AIAnalysisWorker(
@@ -177,6 +163,16 @@ class AnalysisController:
         QMessageBox.critical(self._window, "AI 引擎错误", err_msg)
 
     # ── internal ───────────────────────────────────────────────────
+
+    def _create_progress_dialog(self, label: str):
+        w = self._window
+        dlg = QProgressDialog(label, "取消", 0, 100, w)
+        dlg.setWindowTitle("分析进度")
+        dlg.setWindowModality(Qt.WindowModality.NonModal)
+        dlg.setAutoClose(False)
+        dlg.setAutoReset(False)
+        dlg.setValue(0)
+        return dlg
 
     def close_progress_dialog(self):
         if not self.progress_dialog:
