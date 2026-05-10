@@ -48,9 +48,11 @@ DB_FILE = os.path.join(DB_DIR, "wsi_data.db")
 DB_DEFAULT_CAPACITY_MB = 150
 DB_MIN_CAPACITY_MB = 50
 
-# AI 推理与图像处理配置
-AI_PATCH_SIZE = 512
-AI_STRIDE = 400
+# ── AI 推理与图像处理配置 ────────────────────────────────────────────
+# model_input_size: YOLO imgsz 参数 (送入模型的图像边长, px).
+# 不是 Level-0 物理窗口尺寸; 该尺寸由 target_mpp / slide_mpp 自动计算.
+AI_PATCH_SIZE = 512      # 模型输入尺寸
+AI_STRIDE = 400          # Level-0 滑窗步长 (px)
 AI_NMS_IOU_THRESH = 0.25
 AI_CONF_THRESH = 0.5
 AI_MASK_TARGET_LEVEL = 3

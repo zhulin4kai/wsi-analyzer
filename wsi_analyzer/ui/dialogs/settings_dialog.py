@@ -148,6 +148,9 @@ class SettingsDialog(QDialog):
         self.spin_patch_size.setValue(
             self._db.get_setting("ai_patch_size", getattr(config, "AI_PATCH_SIZE", 512))
         )
+        self.spin_patch_size.setToolTip(
+            "送入 YOLO 的图像边长 (px). Level-0 物理窗口尺寸由 target_mpp / slide_mpp 自动计算。"
+        )
 
         self.spin_stride = QSpinBox()
         self.spin_stride.setRange(64, 4096)
@@ -183,7 +186,7 @@ class SettingsDialog(QDialog):
         layout.addRow("模型架构 (Architecture):", self.combo_model_type)
         layout.addRow("模型训练倍率:", self.combo_mag)
         layout.addRow("模型目标 MPP (μm/px):", self.spin_mpp)
-        layout.addRow("切片尺寸 (Patch Size):", self.spin_patch_size)
+        layout.addRow("模型输入尺寸 (imgsz):", self.spin_patch_size)
         layout.addRow("滑动步长 (Stride):", self.spin_stride)
         layout.addRow("NMS IOU 阈值:", self.spin_iou)
         layout.addRow("置信度阈值 (Conf):", self.spin_conf)

@@ -4,6 +4,7 @@ from wsi_analyzer.application.analysis.analysis_config_resolver import AnalysisC
 from wsi_analyzer.application.analysis.analysis_service import FullSlideAnalysisService
 from wsi_analyzer.application.analysis.analysis_session import AnalysisSession
 from wsi_analyzer.application.analysis.coordinate_service import AnalysisCoordinateService
+from wsi_analyzer.domain.analysis.inference_geometry import InferenceGeometry
 from wsi_analyzer.domain.analysis.tissue_mask import TissueMaskGenerator
 from wsi_analyzer.infrastructure.imaging.openslide_read_adapter import OpenSlideReadAdapter
 from wsi_analyzer.infrastructure.imaging import PatchReader
@@ -38,37 +39,58 @@ class AnalysisServiceFactory:
         self._database = database
         self._image_server = image_server
 
-    def create(
-        self,
-        svs_path,
-        model_path,
-    ) -> AnalysisServiceHandle:
+    def create(self, svs_path, model_path) -> AnalysisServiceHandle:
         resolver = AnalysisConfigResolver(self._database)
         analysis_config = resolver.resolve(svs_path, model_path)
-        logger.info(f"[*] 使用计算设备: {analysis_config.device}, Batch Size: {analysis_config.batch_size}")
-        logger.info(f"[*] 正在加载模型: {model_path}")
+        logger.info(
+            f"[*] device={analysis_config.device}, batch_size={analysis_config.batch_size}"
+        )
+        logger.info(f"[*] loading model: {model_path}")
         adapter = ModelAdapterFactory.create_adapter(model_path)
 
-        logger.info(f"[*] 正在打开 WSI 文件: {svs_path}")
+        logger.info(f"[*] opening WSI: {svs_path}")
         engine = self._image_server.acquire_engine(svs_path)
-
         slide_port = OpenSlideReadAdapter(engine)
-        target_level, target_downsample = slide_port.resolve_target_level(analysis_config.target_mpp)
 
-        reader = PatchReader(engine, target_level, target_downsample, analysis_config.model_input_size)
-        inferencer = BatchInferencer(adapter, reader, analysis_config.device, analysis_config.batch_size, analysis_config.conf_thresh)
+        read_level, read_downsample = slide_port.resolve_target_level(analysis_config.target_mpp)
+        slide_mpp = slide_port.slide_mpp
+
+        geometry = InferenceGeometry.from_config_and_slide(
+            model_input_size=analysis_config.model_input_size,
+            target_mpp=analysis_config.target_mpp,
+            level0_stride=analysis_config.level0_stride,
+            slide_mpp=slide_mpp,
+            objective_power=slide_port.objective_power,
+            read_level=read_level,
+            read_downsample=read_downsample,
+        )
+        logger.info(f"[*] geometry: {geometry}")
+
+        reader = PatchReader(engine)
+        inferencer = BatchInferencer(
+            adapter, reader, analysis_config.device,
+            analysis_config.batch_size, analysis_config.conf_thresh,
+            model_input_size=geometry.model_input_size,
+        )
+
+        mask_generator = TissueMaskGenerator(
+            min_area_ratio=getattr(config, "AI_MIN_AREA_RATIO", 0.001)
+        )
+
+        coordinate_service = AnalysisCoordinateService(
+            mask_generator=mask_generator,
+            geometry=geometry,
+            slide_port=slide_port,
+        )
 
         session = AnalysisSession(analysis_config)
 
-        coordinate_service = AnalysisCoordinateService(
-            mask_generator=TissueMaskGenerator(getattr(config, "AI_MIN_AREA_RATIO", 0.001)),
-            config=analysis_config,
-            slide_port=OpenSlideReadAdapter(engine),
-        )
-
         service = FullSlideAnalysisService(
-            coordinate_service=coordinate_service, inferencer=inferencer,
-            config=analysis_config, session=session,
+            coordinate_service=coordinate_service,
+            inferencer=inferencer,
+            config=analysis_config,
+            session=session,
+            geometry=geometry,
         )
 
         return AnalysisServiceHandle(

@@ -23,3 +23,12 @@ class OpenSlideReadAdapter(SlideReadPort):
     @property
     def level0_dimensions(self) -> tuple:
         return self._engine.level_0_dim
+
+    @property
+    def slide_mpp(self) -> float | None:
+        mpp = self._engine.get_mpp()
+        return mpp[0] if mpp else None
+
+    @property
+    def objective_power(self) -> float | None:
+        return self._engine.get_objective_power()
