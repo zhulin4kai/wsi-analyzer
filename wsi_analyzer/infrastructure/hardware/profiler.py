@@ -110,7 +110,6 @@ class HardwareProfiler:
         else:
             theoretical_batch_size = int(usable_vram / vram_per_tile)
 
-        io_capped_batch_size = theoretical_batch_size
         if io_speed < config.IO_SPEED_NAS_USB2_MBPS:
             io_capped_batch_size = min(theoretical_batch_size, config.BATCH_SIZE_CAP_NAS_USB2)
         elif io_speed < config.IO_SPEED_SATA_SSD_MBPS:

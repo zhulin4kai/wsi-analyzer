@@ -131,7 +131,6 @@ class AnalysisResultController:
             w.heatmap_controller.update_heatmap_layer()
 
         if w.current_wsi_path:
-            d = result.to_dict()
             container.database.analysis.save_analysis(
                 file_path=w.current_wsi_path,
                 model_path=w.current_model_path or "",

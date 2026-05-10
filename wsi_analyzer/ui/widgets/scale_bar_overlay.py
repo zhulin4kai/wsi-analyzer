@@ -69,12 +69,12 @@ class ScaleBarOverlay(QWidget):
 
     # ── 公共 API ─────────────────────────────────────────────────────────
 
-    def load(self, mpp_x, mpp_y):
+    def load(self, mpp_x, _mpp_y):
         """
         加载新切片时由主窗口调用，传入物理分辨率元数据。
 
         :param mpp_x: 水平方向微米/像素，无元数据时传 None
-        :param mpp_y: 垂直方向微米/像素，无元数据时传 None（当前不使用）
+        :param _mpp_y: 垂直方向微米/像素，无元数据时传 None（当前不使用）
         """
         self._mpp_x = mpp_x
         self.setVisible(True)

@@ -40,7 +40,7 @@ class AnalysisController:
             )
             msg_box.setIcon(QMessageBox.Question)
             btn_yes = msg_box.addButton("是", QMessageBox.ActionRole)
-            btn_no = msg_box.addButton("否", QMessageBox.ActionRole)
+            msg_box.addButton("否", QMessageBox.ActionRole)
             msg_box.exec()
             if msg_box.clickedButton() == btn_yes:
                 resume_data = cache_data
