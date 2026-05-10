@@ -1,6 +1,6 @@
 # AGENTS.md — WSIAnalyzer
 
-Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-specific instructions as needed.
+Behavioral guidelines for LLM coding agents. Merge with project-specific instructions as needed.
 
 **Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
 
@@ -46,11 +46,6 @@ The test: Every changed line should trace directly to the user's request.
 
 **Define success criteria. Loop until verified.**
 
-Transform tasks into verifiable goals:
-- "Add validation" → "Write tests for invalid inputs, then make them pass"
-- "Fix the bug" → "Write a test that reproduces it, then make it pass"
-- "Refactor X" → "Ensure tests pass before and after"
-
 For multi-step tasks, state a brief plan:
 ```
 1. [Step] → verify: [check]
@@ -58,27 +53,79 @@ For multi-step tasks, state a brief plan:
 3. [Step] → verify: [check]
 ```
 
-Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
-
 ---
 
-**These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
+## Architecture
 
-## Key architecture
+### Layer dependency direction (strict)
+
+```
+app/            → application/, infrastructure/
+application/    → domain/, infrastructure/
+infrastructure/ → domain/
+domain/         → (no external deps — pure numpy/cv2/dataclasses)
+workers/        → app/ (for DI), application/
+ui/             → app/ (for DI), workers/
+```
+
+### Layer roles
 
 | Directory | Role |
 |---|---|
-| `core/` | AI engine, model adapters, slide I/O, ROI logic, tile cache, launcher |
-| `gui/` | PySide6 UI: `main_window.py` + `mixins/` + `widgets/` + `dialogs/` |
-| `workers/` | QThread/QRunnable tasks: AI, gallery thumbnails, rendering, profiling |
-| `utils/` | DB, hardware profiler, NMS, logging, schema DDL |
+| `domain/` | Pure dataclasses + algorithms: coordinates, entities, detection, analysis, NMS, heatmap, fusion |
+| `application/` | Orchestration: `FullSlideAnalysisService`, `AnalysisServiceFactory`, `AnalysisConfigResolver` |
+| `infrastructure/` | Adapt to external systems: `ImageServer`, `OpenSlideEngine`, `BatchInferencer`, `ModelInspector`, `HardwareProfiler`, `DatabaseManager` |
+| `ui/` | PySide6 GUI: `main_window.py`, `controllers/`, `layers/`, `widgets/`, `dialogs/`, `rendering/` |
+| `workers/` | QThread thin adapters: `AIAnalysisWorker` (45 lines), `RenderWorker`, `GalleryWorker`, `ProfileWorker`, `PreloadTask` |
+| `app/` | Entry points: `main.py` → `bootstrap.py` → `MainWindow`, `DependencyContainer`, `launcher/` |
+| `config/` | Runtime constants (`config.py`) |
+| `shared/` | Cross-layer utilities (`wsi_file_utils`, `drag_drop_mime`) |
+
+### Key conventions
+
+- **DI singleton**: `from wsi_analyzer.app.dependency_container import container` — the only global instance. Provides `container.database`, `container.image_server`, `container.analysis_service_factory`.
+- **Public exports**: Every non-empty `__init__.py` has `__all__`. Import from package, not internal file.
+- **No app/ imports from application/ or domain/** — this is a layering violation.
+- **`AnalysisResult`** is a dataclass in `domain/analysis/result.py` with `.to_dict()`. UI/DB call `.to_dict()` only at the boundary.
+- **`AnalysisResultBuilder`** returns `AnalysisResult` objects, never dicts.
+- **Heatmap computation** is in `domain/detection/heatmap.py` (pure numpy/cv2). UI `HeatmapLayer` only handles `rgba → QPixmap`.
+- **Model introspection** goes through `infrastructure/inference/model_inspector.py` — UI never imports ultralytics directly.
+- **Protected members** (`_xxx`) should not be called across class boundaries. Use public equivalents.
+
+### Critical files
+
+| File | Purpose |
+|---|---|
+| `main.py` | Multiprocessing entry point (Tkinter splash → Qt main process) |
+| `wsi_analyzer/app/bootstrap.py` | Qt event loop lifecycle, calls `container.image_server.shutdown()` on exit |
+| `wsi_analyzer/app/dependency_container.py` | Global DI container (7-line singleton) |
+| `wsi_analyzer/domain/analysis/result.py` | `AnalysisResult` dataclass — the result type flowing through the full pipeline |
+| `wsi_analyzer/application/analysis/analysis_service.py` | `FullSlideAnalysisService.run()` — main inference orchestration |
+| `wsi_analyzer/application/analysis/analysis_service_factory.py` | `AnalysisServiceFactory.create()` — assembles all dependencies |
+| `wsi_analyzer/workers/ai_worker.py` | Thin Qt adapter (45 lines) — no configuration logic |
+| `wsi_analyzer/ui/main_window.py` | Assembly only: creates widgets, controllers, docks, menu, signals |
+
+## Tests
+
+```
+# Run all domain tests (38 tests, ~0.2s)
+$env:PYTHONPATH = "."; python -m pytest tests/domain/ -q
+
+# Compile check all files
+python -m py_compile (list of changed .py files)
+```
 
 ## graphify
 
-This project has a graphify knowledge graph at graphify-out/.
+Knowledge graph at `graphify-out/`. Rules:
+- Before answering architecture questions, read `graphify-out/GRAPH_REPORT.md` for god nodes and community structure
+- For cross-module queries: `graphify query "<question>"`, `graphify path "<A>" "<B>"`, `graphify explain "<concept>"`
+- After modifying code files in a session, run `graphify update .` (AST-only, no API cost)
+- Full pipeline: `/graphify .` (re-extracts AST + semantic, rebuilds HTML + report)
 
-Rules:
-- Before answering architecture or codebase questions, read graphify-out/GRAPH_REPORT.md for god nodes and community structure
-- If graphify-out/wiki/index.md exists, navigate it instead of reading raw files
-- For cross-module "how does X relate to Y" questions, prefer `graphify query "<question>"`, `graphify path "<A>" "<B>"`, or `graphify explain "<concept>"` over grep — these traverse the graph's EXTRACTED + INFERRED edges instead of scanning files
-- After modifying code files in this session, run `graphify update .` to keep the graph current (AST-only, no API cost)
+## Windows notes
+
+- Shell: PowerShell 5.1. No `&&` chaining — use `; if ($?) { ... }` for sequential deps.
+- Path quoting: always quote paths with spaces.
+- UTF-8: use `$env:PYTHONUTF8 = "1"` before Python commands.
+- Python: `D:/DevTools/Miniconda3/python.exe` (deduce from `graphify-out/.graphify_python` if exists, otherwise use the system default).
