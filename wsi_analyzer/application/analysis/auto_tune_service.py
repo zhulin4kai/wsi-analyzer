@@ -10,10 +10,10 @@ class AutoTuneService:
             io_speed, config.patch_size, model_size_mb
         )
         return AnalysisConfig.from_raw(
-            patch_size=auto_params.get("patch_size", config.patch_size),
-            stride=auto_params.get("stride", config.stride),
-            nms_iou_thresh=auto_params.get("nms_iou_thresh", config.nms_iou_thresh),
-            conf_thresh=auto_params.get("conf_thresh", config.conf_thresh),
+            patch_size=int(auto_params.get("patch_size", config.patch_size)),
+            stride=int(auto_params.get("stride", config.stride)),
+            nms_iou_thresh=float(auto_params.get("nms_iou_thresh", config.nms_iou_thresh)),
+            conf_thresh=float(auto_params.get("conf_thresh", config.conf_thresh)),
             device=config.device,
             batch_size=config.batch_size,
             target_mpp=config.target_mpp,

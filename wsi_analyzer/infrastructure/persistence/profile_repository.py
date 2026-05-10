@@ -16,7 +16,7 @@ class ProfileStore:
     def _connect(self):
         return sqlite3.connect(self._db_path, timeout=5000)
 
-    def get_system_profile(self, drive_prefix: str) -> dict:
+    def get_system_profile(self, drive_prefix: str) -> dict | None:
         try:
             with self._connect() as conn:
                 conn.row_factory = sqlite3.Row

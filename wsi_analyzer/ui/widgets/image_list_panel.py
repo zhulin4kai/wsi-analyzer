@@ -1,6 +1,6 @@
 import os
 
-from PySide6.QtCore import QSize, Qt, QTimer, Signal
+from PySide6.QtCore import QPoint, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtWidgets import (
     QDockWidget,
@@ -116,8 +116,8 @@ class ImageListPanel(QDockWidget):
             self._entries.append(abs_path)
 
             item = QListWidgetItem(os.path.basename(abs_path))
-            item.setData(Qt.UserRole, abs_path)
-            if not os.path.exists(abs_path):
+            item.setData(Qt.UserRole, str(abs_path))
+            if not os.path.exists(str(abs_path)):
                 item.setToolTip("文件不存在")
             self.list_widget.addItem(item)
 
@@ -167,7 +167,7 @@ class ImageListPanel(QDockWidget):
         """单击或键盘切换选中项时，后台预热引擎（消除首帧延迟）。"""
         if current is None:
             return
-        path = current.data(Qt.UserRole)
+        path = str(current.data(Qt.UserRole))
         if path and os.path.exists(path):
             from PySide6.QtCore import QThreadPool
             from wsi_analyzer.workers import PreloadTask
@@ -239,7 +239,7 @@ class ImageListPanel(QDockWidget):
         if self._pending_load_path:
             self._start_load()
 
-    def _on_context_menu(self, pos):
+    def _on_context_menu(self, pos: QPoint):
         """右键菜单：从列表中移除选中项。"""
         item = self.list_widget.itemAt(pos)
         if not item:

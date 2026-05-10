@@ -41,9 +41,9 @@ class HeatmapController:
     def _on_zoom_changed_lod(self, scale: float):
         if self.chk_show_heatmap and not self.chk_show_heatmap.isChecked():
             return
-        if scale < HEATMAP_LOD_MACRO_THRESH:
+        if scale < float(HEATMAP_LOD_MACRO_THRESH):
             self._layers.heatmap.set_opacity(1.0)
-        elif scale < HEATMAP_LOD_MID_THRESH:
+        elif scale < float(HEATMAP_LOD_MID_THRESH):
             self._layers.heatmap.set_opacity(0.7)
         else:
             self._layers.heatmap.set_opacity(0.4)

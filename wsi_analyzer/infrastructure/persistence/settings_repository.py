@@ -55,7 +55,7 @@ class SettingsStore:
     # ── 快捷方法 ──────────────────────────────────────────────────────
 
     def get_auto_tune_enabled(self) -> bool:
-        return self.get_setting("auto_tune_enabled", True)
+        return bool(self.get_setting("auto_tune_enabled", True))
 
     def set_auto_tune_enabled(self, enabled: bool):
         self.set_setting("auto_tune_enabled", str(enabled))

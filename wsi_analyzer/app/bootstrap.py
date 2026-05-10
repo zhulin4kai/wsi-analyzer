@@ -58,4 +58,4 @@ def _configure_app_icon(app: QApplication) -> None:
     if not os.path.exists(icon_path):
         icon_path = os.path.join(base_dir, "app_icon.ico")
     if os.path.exists(icon_path):
-        app.setWindowIcon(QIcon(icon_path))
+        app.setWindowIcon(QIcon(str(icon_path)))

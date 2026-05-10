@@ -188,6 +188,7 @@ class WSIView(QGraphicsView):
             return None
 
     def _setup_scene_for_metadata(self, metadata):
+        assert metadata is not None
         w, h = metadata.level_0_dim
         self.scene_canvas.setSceneRect(0, 0, w, h)
         self.resetTransform()
@@ -206,6 +207,7 @@ class WSIView(QGraphicsView):
             logger.error(f"宏观底图加载失败: {e}")
 
     def _fit_slide_to_view(self, metadata):
+        assert metadata is not None
         w, h = metadata.level_0_dim
         view_rect = self.viewport().rect()
         scale_w = view_rect.width() / w

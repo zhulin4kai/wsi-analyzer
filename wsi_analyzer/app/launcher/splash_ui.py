@@ -58,7 +58,7 @@ class SplashUI:
             icon_path = os.path.join(base_dir, "app_icon.ico")
         if os.path.exists(icon_path):
             try:
-                self.root.iconbitmap(icon_path)
+                self.root.iconbitmap(str(icon_path))
             except tk.TclError:
                 pass
 
@@ -104,7 +104,7 @@ class SplashUI:
     def _load_image(self, image_path: str):
         if os.path.exists(image_path) and HAS_PIL:
             try:
-                img = Image.open(image_path)
+                img = Image.open(str(image_path))
                 if img.mode != "RGB":
                     img = img.convert("RGB")
 

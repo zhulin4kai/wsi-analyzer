@@ -248,12 +248,12 @@ class SettingsDialog(QDialog):
             min(self.spin_stride.value(), getattr(config, "AI_STRIDE_MAX", 4096)),
         )
         iou = max(
-            getattr(config, "AI_NMS_IOU_THRESH_MIN", 0.01),
-            min(self.spin_iou.value(), getattr(config, "AI_NMS_IOU_THRESH_MAX", 1.0)),
+            float(getattr(config, "AI_NMS_IOU_THRESH_MIN", 0.01)),
+            min(self.spin_iou.value(), float(getattr(config, "AI_NMS_IOU_THRESH_MAX", 1.0))),
         )
         conf = max(
-            getattr(config, "AI_CONF_THRESH_MIN", 0.01),
-            min(self.spin_conf.value(), getattr(config, "AI_CONF_THRESH_MAX", 1.0)),
+            float(getattr(config, "AI_CONF_THRESH_MIN", 0.01)),
+            min(self.spin_conf.value(), float(getattr(config, "AI_CONF_THRESH_MAX", 1.0))),
         )
 
         self._db.set_setting("ai_patch_size", patch_size)
