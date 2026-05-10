@@ -1,10 +1,7 @@
 # wsi_analyzer/app/bootstrap.py
 
-from __future__ import annotations
-
 import os
 import sys
-import multiprocessing
 
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
@@ -14,10 +11,7 @@ from wsi_analyzer.infrastructure.logging import logger
 from wsi_analyzer.ui.main_window import MainWindow
 
 
-def run_qt_app(
-    ready_event: multiprocessing.Event,
-    msg_queue: multiprocessing.Queue[str],
-) -> None:
+def run_qt_app(ready_event, msg_queue) -> None:
     msg_queue.put("正在加载核心框架...")
 
     logger.info("========== 智能病理辅助诊断系统启动 ==========")
