@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QListWidget,
     QListWidgetItem,
-    QWidget,
+    QWidget, QListView,
 )
 
 from wsi_analyzer.workers import GalleryWorker

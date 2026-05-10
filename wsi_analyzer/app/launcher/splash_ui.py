@@ -51,7 +51,7 @@ class SplashUI:
 
         # 设置任务栏和窗口图标
         base_dir = os.path.dirname(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            os.path.dirname(os.path.abspath(__file__))
         )
         icon_path = os.path.join(base_dir, "assets", "app_icon.ico")
         if not os.path.exists(icon_path):
