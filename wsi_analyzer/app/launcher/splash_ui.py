@@ -28,11 +28,11 @@ class SplashUI:
 
             try:
                 # Windows 8.1+
-                ctypes.windll.shcore.SetProcessDpiAwareness(1)
+                ctypes.windll.shcore.SetProcessDpiAwareness(1)  # type: ignore[attr-defined]
             except (OSError, AttributeError):
                 try:
                     # Windows Vista/7/8
-                    ctypes.windll.user32.SetProcessDPIAware()
+                    ctypes.windll.user32.SetProcessDPIAware()  # type: ignore[attr-defined]
                 except (OSError, AttributeError):
                     pass
 
@@ -41,7 +41,7 @@ class SplashUI:
                 import ctypes
 
                 try:
-                    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+                    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(  # type: ignore[attr-defined]
                         "wsianalyzer.app.v0.0.1"
                     )
                 except (OSError, AttributeError):
@@ -103,12 +103,14 @@ class SplashUI:
 
     def _load_image(self, image_path: str):
         if os.path.exists(image_path) and HAS_PIL:
+            assert Image is not None
+            assert ImageTk is not None
             try:
                 img = Image.open(str(image_path))
                 if img.mode != "RGB":
                     img = img.convert("RGB")
 
-                resample_filter = getattr(Image, "Resampling", Image).LANCZOS
+                resample_filter = Image.Resampling.LANCZOS
                 img = img.resize((self.width, self.height), resample_filter)
                 self.image_ref = ImageTk.PhotoImage(img)
 

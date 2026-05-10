@@ -9,7 +9,7 @@ class PatchReader:
         self._target_level = target_level
         self._target_downsample = target_downsample
         self._patch_size = patch_size
-        _resample = getattr(Image, "Resampling", Image).LANCZOS if hasattr(Image, "Resampling") else Image.LANCZOS
+        _resample = Image.Resampling.LANCZOS
         self._resample = _resample
 
     def read(self, coord: PatchCoordinate) -> Image.Image:

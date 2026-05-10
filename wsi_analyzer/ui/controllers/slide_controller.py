@@ -91,9 +91,9 @@ class SlideController:
             reply = QMessageBox.question(
                 w, "发现分析缓存",
                 "检测到该病理切片已有历史检测记录。\n是否直接加载本地缓存结果？",
-                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             )
-            if reply == QMessageBox.Yes:
+            if reply == QMessageBox.StandardButton.Yes:
                 from wsi_analyzer.domain.analysis import AnalysisResult
                 result = AnalysisResult.from_cache(cache_data)
                 w.result_controller.render_ai_results(result)

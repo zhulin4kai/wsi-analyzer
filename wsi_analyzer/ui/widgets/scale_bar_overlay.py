@@ -49,8 +49,8 @@ class ScaleBarOverlay(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         # 鼠标穿透 + 透明背景，不遮挡交互
-        self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setAttribute(Qt.WA_TransparentForMouseEvents)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
 
         self._mpp_x = None  # 微米/像素（Level-0）
         self._current_scale = 1.0  # view.transform().m11()
@@ -122,8 +122,8 @@ class ScaleBarOverlay(QWidget):
             return
 
         p = QPainter(self)
-        p.setRenderHint(QPainter.Antialiasing)
-        p.setRenderHint(QPainter.TextAntialiasing)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        p.setRenderHint(QPainter.RenderHint.TextAntialiasing)
 
         w = self.width()
         pad = _PADDING
@@ -137,7 +137,7 @@ class ScaleBarOverlay(QWidget):
             tick_top = bar_y - 5
             tick_bot = bar_y + 5
 
-            pen = QPen(_FG_COLOR, 2, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+            pen = QPen(_FG_COLOR, 2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
             p.setPen(pen)
 
             # 水平主线
@@ -151,14 +151,14 @@ class ScaleBarOverlay(QWidget):
             p.setFont(self._font_9)
             p.setPen(_DIM_COLOR)
             p.drawText(
-                pad, bar_y + 5, self._bar_px, 16, Qt.AlignCenter, self._bar_label
+                pad, bar_y + 5, self._bar_px, 16, Qt.AlignmentFlag.AlignCenter, self._bar_label
             )
         else:
             # 无 MPP 元数据时提示
             p.setFont(self._font_8)
             p.setPen(_DIM_COLOR)
             p.drawText(
-                pad, 8, w - 2 * pad, 20, Qt.AlignLeft | Qt.AlignVCenter, "无标定信息"
+                pad, 8, w - 2 * pad, 20, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, "无标定信息"
             )
 
         p.end()

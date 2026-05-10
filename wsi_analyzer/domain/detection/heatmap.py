@@ -55,7 +55,7 @@ def compute_heatmap_grid(
     if max_val > 1e-8:
         grid = grid / max_val
 
-    return grid.astype(np.float32)
+    return grid.astype(np.float32)  # type: ignore[union-attr]
 
 
 def grid_to_rgba(

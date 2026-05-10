@@ -31,12 +31,12 @@ class ImageListPanel(QDockWidget):
 
     def __init__(self, parent=None):
         super().__init__("切片列表", parent)
-        self.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
+        self.setAllowedAreas(Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea)
         self.setMinimumWidth(200)
 
         # 停靠时不显示关闭按钮，浮动时显示
         self.setFeatures(
-            QDockWidget.DockWidgetFloatable | QDockWidget.DockWidgetMovable
+            QDockWidget.DockWidgetFeature.DockWidgetFloatable | QDockWidget.DockWidgetFeature.DockWidgetMovable
         )
         self.topLevelChanged.connect(self._on_top_level_changed)
 
@@ -70,7 +70,7 @@ class ImageListPanel(QDockWidget):
         self.list_widget.setSpacing(2)
         self.list_widget.itemDoubleClicked.connect(self._on_item_double_clicked)
         self.list_widget.currentItemChanged.connect(self._on_selection_changed)
-        self.list_widget.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.list_widget.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.list_widget.customContextMenuRequested.connect(self._on_context_menu)
         layout.addWidget(self.list_widget)
 
@@ -86,13 +86,13 @@ class ImageListPanel(QDockWidget):
         """悬浮时显示关闭按钮，停靠时隐藏关闭按钮"""
         if floating:
             self.setFeatures(
-                QDockWidget.DockWidgetFloatable
-                | QDockWidget.DockWidgetMovable
-                | QDockWidget.DockWidgetClosable
+                QDockWidget.DockWidgetFeature.DockWidgetFloatable
+                | QDockWidget.DockWidgetFeature.DockWidgetMovable
+                | QDockWidget.DockWidgetFeature.DockWidgetClosable
             )
         else:
             self.setFeatures(
-                QDockWidget.DockWidgetFloatable | QDockWidget.DockWidgetMovable
+                QDockWidget.DockWidgetFeature.DockWidgetFloatable | QDockWidget.DockWidgetFeature.DockWidgetMovable
             )
 
     def closeEvent(self, event):
@@ -116,7 +116,7 @@ class ImageListPanel(QDockWidget):
             self._entries.append(abs_path)
 
             item = QListWidgetItem(os.path.basename(abs_path))
-            item.setData(Qt.UserRole, str(abs_path))
+            item.setData(Qt.ItemDataRole.UserRole, str(abs_path))
             if not os.path.exists(str(abs_path)):
                 item.setToolTip("文件不存在")
             self.list_widget.addItem(item)
@@ -139,7 +139,7 @@ class ImageListPanel(QDockWidget):
         abs_path = os.path.abspath(file_path)
         for i in range(self.list_widget.count()):
             item = self.list_widget.item(i)
-            if item.data(Qt.UserRole) == abs_path:
+            if item.data(Qt.ItemDataRole.UserRole) == abs_path:
                 self.list_widget.setCurrentItem(item)
                 return
 
@@ -167,13 +167,12 @@ class ImageListPanel(QDockWidget):
         """单击或键盘切换选中项时，后台预热引擎（消除首帧延迟）。"""
         if current is None:
             return
-        path = str(current.data(Qt.UserRole))
-        if path and os.path.exists(path):
+        item_path = str(current.data(Qt.ItemDataRole.UserRole))
+        if item_path and os.path.exists(item_path):
             from PySide6.QtCore import QThreadPool
             from wsi_analyzer.workers import PreloadTask
 
-            # 低优先级（-1）不与前台瓦片渲染竞争
-            QThreadPool.globalInstance().start(PreloadTask(path), -1)
+            QThreadPool.globalInstance().start(PreloadTask(item_path), -1)
 
     def _restart_thumb_worker(self):
         """取消旧 Worker，以所有未加载项重新启动缩略图加载。"""
@@ -215,7 +214,7 @@ class ImageListPanel(QDockWidget):
         快速连续切换时，若当前正在加载则记录最后点击的路径，
         待当前加载完成后自动加载最新请求，避免 OpenSlide C 层并发崩溃。
         """
-        path = item.data(Qt.UserRole)
+        path = item.data(Qt.ItemDataRole.UserRole)
         if path and os.path.exists(path):
             self._pending_load_path = path
             if not self._loading:
@@ -251,7 +250,7 @@ class ImageListPanel(QDockWidget):
 
     def _remove_item(self, item: QListWidgetItem):
         """从列表和内部记录中删除指定项，同步修正缩略图加载索引。"""
-        path = item.data(Qt.UserRole)
+        path = item.data(Qt.ItemDataRole.UserRole)
         row = self.list_widget.row(item)
         self.list_widget.takeItem(row)
         if path in self._entries:
@@ -267,5 +266,5 @@ class ImageListPanel(QDockWidget):
         lower = text.lower()
         for i in range(self.list_widget.count()):
             item = self.list_widget.item(i)
-            name = os.path.basename(item.data(Qt.UserRole)).lower()
+            name = os.path.basename(item.data(Qt.ItemDataRole.UserRole)).lower()
             item.setHidden(lower not in name)

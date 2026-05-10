@@ -27,8 +27,8 @@ class InfoBarOverlay(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         # 鼠标穿透 + 透明背景
-        self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setAttribute(Qt.WA_TransparentForMouseEvents)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
 
         self._mpp_x = None  # 水平微米/像素
         self._mpp_y = None  # 垂直微米/像素
@@ -53,9 +53,9 @@ class InfoBarOverlay(QWidget):
         self.setVisible(False)
 
         # 跨平台等宽字体（QFontDatabase 自动匹配系统默认等宽字体）
-        self._mono_font_9 = QFontDatabase.systemFont(QFontDatabase.FixedFont)
+        self._mono_font_9 = QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont)
         self._mono_font_9.setPointSize(9)
-        self._mono_font_8 = QFontDatabase.systemFont(QFontDatabase.FixedFont)
+        self._mono_font_8 = QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont)
         self._mono_font_8.setPointSize(8)
 
     # ── 公共 API ─────────────────────────────────────────────────────────
@@ -119,8 +119,8 @@ class InfoBarOverlay(QWidget):
             return
 
         p = QPainter(self)
-        p.setRenderHint(QPainter.Antialiasing)
-        p.setRenderHint(QPainter.TextAntialiasing)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        p.setRenderHint(QPainter.RenderHint.TextAntialiasing)
 
         w = self.width()
         pad = _PADDING
@@ -133,7 +133,7 @@ class InfoBarOverlay(QWidget):
         p.setPen(_FG_COLOR)
         p.setFont(self._mono_font_9)
         text_w = w - 2 * pad - swatch - 8
-        p.drawText(pad, 2, text_w, 22, Qt.AlignLeft | Qt.AlignVCenter, self._coord_text)
+        p.drawText(pad, 2, text_w, 22, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, self._coord_text)
 
         # ── RGB 预览色块（右上角）──
         if self._rgb_color.alpha() > 0:
@@ -148,7 +148,7 @@ class InfoBarOverlay(QWidget):
             p.setFont(self._mono_font_8)
             p.setPen(_DIM_COLOR)
             p.drawText(
-                pad, 28, w - 2 * pad, 20, Qt.AlignLeft | Qt.AlignVCenter, self._rgb_text
+                pad, 28, w - 2 * pad, 20, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, self._rgb_text
             )
 
         p.end()

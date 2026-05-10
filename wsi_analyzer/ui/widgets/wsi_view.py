@@ -71,17 +71,17 @@ class WSIView(QGraphicsView):
         # 拖拽悬停时的半透明灰色遮罩
         self._drop_overlay = QGraphicsRectItem()
         self._drop_overlay.setBrush(QBrush(QColor(80, 80, 80, 60)))
-        self._drop_overlay.setPen(QPen(Qt.NoPen))
+        self._drop_overlay.setPen(QPen(Qt.PenStyle.NoPen))
         self._drop_overlay.setZValue(9999)
         self._drop_overlay.setVisible(False)
         self.scene_canvas.addItem(self._drop_overlay)
 
         self.setAcceptDrops(True)
-        self.setRenderHint(QPainter.Antialiasing)
-        self.setRenderHint(QPainter.SmoothPixmapTransform)
-        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)
+        self.setRenderHint(QPainter.RenderHint.Antialiasing)
+        self.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
 
         # Current slide state — replaces direct slide_engine ownership
         self._current_path: str | None = None
@@ -289,7 +289,7 @@ class WSIView(QGraphicsView):
         if abs(factor - 1.0) < 1e-9:
             return
         old_anchor = self.transformationAnchor()
-        self.setTransformationAnchor(QGraphicsView.AnchorViewCenter)
+        self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorViewCenter)
         self.scale(factor, factor)
         self.setTransformationAnchor(old_anchor)
         self.zoom_changed.emit(self.transform().m11())

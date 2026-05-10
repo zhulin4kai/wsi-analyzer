@@ -102,7 +102,7 @@ class HeatmapController:
             mini_rgba[:, :, 3] = cv2.GaussianBlur(mini_rgba[:, :, 3], (k, k), extra_sigma)
 
         mini_qi = QImage(
-            mini_rgba.data, mini_w, mini_h, mini_w * 4, QImage.Format_RGBA8888
+            mini_rgba.data, mini_w, mini_h, mini_w * 4, QImage.Format.Format_RGBA8888
         ).copy()
 
         m.heatmap_mini_item.setPixmap(QPixmap.fromImage(mini_qi))

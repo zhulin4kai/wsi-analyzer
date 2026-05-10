@@ -42,7 +42,7 @@ class HeatmapLayer:
             colormap=HEATMAP_COLORMAP,
         )
         h, w = rgba.shape[:2]
-        qimage = QImage(rgba.data, w, h, w * 4, QImage.Format_RGBA8888).copy()
+        qimage = QImage(rgba.data, w, h, w * 4, QImage.Format.Format_RGBA8888).copy()
 
         pixmap = QPixmap.fromImage(qimage)
         self._item.setPixmap(pixmap)

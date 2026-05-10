@@ -80,9 +80,9 @@ class AnalysisResultController:
         reply = QMessageBox.question(
             w, "清除结果",
             "确定要清除当前的所有分析结果与导入标注吗？",
-            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
-        if reply != QMessageBox.Yes:
+        if reply != QMessageBox.StandardButton.Yes:
             return
 
         self._layers.clear_ai_items()

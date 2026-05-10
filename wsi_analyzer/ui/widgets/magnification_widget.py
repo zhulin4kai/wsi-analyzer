@@ -27,13 +27,13 @@ class MagnificationWidget(QWidget):
         # ── 显示标签（正常模式）──────────────────────────────────────────
         self._label = QLabel("─ ×")
         self._label.setFixedSize(HUD_MAG_WIDGET_W, HUD_MAG_WIDGET_H)
-        self._label.setAlignment(Qt.AlignCenter)
+        self._label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._label.installEventFilter(self)
 
         # ── 编辑输入框（编辑模式，默认隐藏）────────────────────────────
         self._editor = QLineEdit()
         self._editor.setFixedSize(HUD_MAG_WIDGET_W, HUD_MAG_WIDGET_H)
-        self._editor.setAlignment(Qt.AlignCenter)
+        self._editor.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._editor.setVisible(False)
         self._editor.installEventFilter(self)
 
@@ -137,14 +137,14 @@ class MagnificationWidget(QWidget):
         # ── 标签：双击进入编辑模式 ──────────────────────────────────────
         if watched is self._label:
             if event.type() == QEvent.Type.MouseButtonDblClick:
-                if event.button() == Qt.LeftButton:
+                if event.button() == Qt.MouseButton.LeftButton:  # type: ignore[union-attr]
                     self._enter_edit_mode()
                     return True
 
         # ── 输入框：Esc 取消 / 失焦确认 ─────────────────────────────────
         elif watched is self._editor:
             if event.type() == QEvent.Type.KeyPress:
-                if event.key() == Qt.Key_Escape:
+                if event.key() == Qt.Key.Key_Escape:  # type: ignore[union-attr]
                     self._exit_edit_mode(apply=False)
                     return True
             elif event.type() == QEvent.Type.FocusOut:

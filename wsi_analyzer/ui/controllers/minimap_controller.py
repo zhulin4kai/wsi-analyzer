@@ -28,7 +28,7 @@ class MinimapController:
 
         layout = QVBoxLayout(self.viewer)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(self.minimap, alignment=Qt.AlignTop | Qt.AlignRight)
+        layout.addWidget(self.minimap, alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight)
 
         self.viewer.view_rect_changed.connect(self.minimap.update_indicator)
         self.minimap.navigate_requested.connect(self._navigate_main_view)

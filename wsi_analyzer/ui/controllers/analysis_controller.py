@@ -38,9 +38,9 @@ class AnalysisController:
             msg_box.setText(
                 "检测到该病理切片有未完成的分析记录。\n是否继续上次的分析进度？\n选择'否'将重新开始。"
             )
-            msg_box.setIcon(QMessageBox.Question)
-            btn_yes = msg_box.addButton("是", QMessageBox.ActionRole)
-            msg_box.addButton("否", QMessageBox.ActionRole)
+            msg_box.setIcon(QMessageBox.Icon.Question)
+            btn_yes = msg_box.addButton("是", QMessageBox.ButtonRole.ActionRole)
+            msg_box.addButton("否", QMessageBox.ButtonRole.ActionRole)
             msg_box.exec()
             if msg_box.clickedButton() == btn_yes:
                 resume_data = cache_data
@@ -55,7 +55,7 @@ class AnalysisController:
             "正在进行全片 AI 检测...", "取消", 0, 100, w
         )
         self.progress_dialog.setWindowTitle("分析进度")
-        self.progress_dialog.setWindowModality(Qt.NonModal)
+        self.progress_dialog.setWindowModality(Qt.WindowModality.NonModal)
         self.progress_dialog.setAutoClose(False)
         self.progress_dialog.setAutoReset(False)
         self.progress_dialog.setValue(0)
@@ -106,7 +106,7 @@ class AnalysisController:
             "正在进行局部 ROI AI 检测...", "取消", 0, 100, w
         )
         self.progress_dialog.setWindowTitle("分析进度")
-        self.progress_dialog.setWindowModality(Qt.NonModal)
+        self.progress_dialog.setWindowModality(Qt.WindowModality.NonModal)
         self.progress_dialog.setAutoClose(False)
         self.progress_dialog.setAutoReset(False)
         self.progress_dialog.setValue(0)
@@ -149,9 +149,9 @@ class AnalysisController:
         msg_box = QMessageBox(w)
         msg_box.setWindowTitle("取消确认")
         msg_box.setText("确定要中断当前的 AI 分析吗？进度将被保存。")
-        msg_box.setIcon(QMessageBox.Question)
-        btn_yes = msg_box.addButton("是", QMessageBox.ActionRole)
-        msg_box.addButton("否", QMessageBox.ActionRole)
+        msg_box.setIcon(QMessageBox.Icon.Question)
+        btn_yes = msg_box.addButton("是", QMessageBox.ButtonRole.ActionRole)
+        msg_box.addButton("否", QMessageBox.ButtonRole.ActionRole)
         msg_box.exec()
 
         if msg_box.clickedButton() == btn_yes:

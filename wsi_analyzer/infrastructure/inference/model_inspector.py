@@ -14,7 +14,7 @@ class ModelInspector:
         try:
             from ultralytics import YOLO
             model = YOLO(file_path)
-            imgsz = model.model.args.get("imgsz")
+            imgsz = model.model.args.get("imgsz")  # type: ignore[union-attr]
             if isinstance(imgsz, int):
                 return imgsz
             return None

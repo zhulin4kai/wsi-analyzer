@@ -45,7 +45,7 @@ def _configure_windows_app_id() -> None:
         return
     import ctypes
     try:
-        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(  # type: ignore[attr-defined]
             "wsianalyzer.app.v0.0.1"
         )
     except (OSError, AttributeError):

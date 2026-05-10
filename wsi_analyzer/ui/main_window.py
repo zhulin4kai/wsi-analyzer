@@ -108,10 +108,10 @@ class MainWindow(QMainWindow):
 
     def _init_dock_widgets(self):
         self.image_list_panel = ImageListPanel(self)
-        self.addDockWidget(Qt.LeftDockWidgetArea, self.image_list_panel)
+        self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.image_list_panel)
 
         self.gallery = LesionGallery(self)
-        self.addDockWidget(Qt.RightDockWidgetArea, self.gallery)
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.gallery)
 
     def _connect_dock_signals(self):
         self.image_list_panel.image_load_requested.connect(
@@ -124,7 +124,7 @@ class MainWindow(QMainWindow):
 
     def _init_toolbar_widgets(self):
         toolbar = QToolBar("AI 辅助分析")
-        self.addToolBar(Qt.TopToolBarArea, toolbar)
+        self.addToolBar(Qt.ToolBarArea.TopToolBarArea, toolbar)
 
         self.mag_widget = MagnificationWidget()
         toolbar.addWidget(self.mag_widget)
@@ -184,7 +184,7 @@ class MainWindow(QMainWindow):
         from wsi_analyzer.ui.dialogs import SettingsDialog
 
         dlg = SettingsDialog(self, current_wsi_path=self.current_wsi_path)
-        if dlg.exec() == QDialog.Accepted:
+        if dlg.exec() == QDialog.DialogCode.Accepted:
             dlg.apply_settings()
             QMessageBox.information(self, "设置成功", "设置已保存。")
 

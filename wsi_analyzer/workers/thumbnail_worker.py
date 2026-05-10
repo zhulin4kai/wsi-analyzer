@@ -18,7 +18,7 @@ class ThumbnailWorker(QThread):
     def run(self):
         from PIL import Image
 
-        resample = getattr(Image, "Resampling", Image).LANCZOS
+        resample = Image.Resampling.LANCZOS
 
         for index, path in self.tasks:
             if self._cancelled:

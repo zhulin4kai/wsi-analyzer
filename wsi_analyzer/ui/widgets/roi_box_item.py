@@ -18,7 +18,7 @@ class ROIBoxItem(QGraphicsRectItem):
         # 高可见度虚线边框
         pen = QPen(QColor(0, 255, 0))
         pen.setWidth(3)
-        pen.setStyle(Qt.DashLine)
+        pen.setStyle(Qt.PenStyle.DashLine)
         # 防止画笔宽度随视图缩放，以保持一致的可见度
         pen.setCosmetic(True)
         self.setPen(pen)

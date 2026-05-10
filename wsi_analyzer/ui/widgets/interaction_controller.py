@@ -46,7 +46,7 @@ class InteractionController(QObject):
 
     def toggle_roi_mode(self, enabled: bool):
         self._is_roi_mode = enabled
-        self._view.setCursor(Qt.CrossCursor if enabled else Qt.ArrowCursor)
+        self._view.setCursor(Qt.CursorShape.CrossCursor if enabled else Qt.CursorShape.ArrowCursor)
 
     def clear_roi_box(self):
         if self._current_roi_item and self._current_roi_item.scene():
@@ -63,7 +63,7 @@ class InteractionController(QObject):
 
     def handle_mouse_press(self, event, has_slide: bool):
         """返回 True 表示已消耗事件，调用方应跳过 super().mousePressEvent()"""
-        if event.button() != Qt.LeftButton or not has_slide:
+        if event.button() != Qt.MouseButton.LeftButton or not has_slide:
             return False
 
         if self._is_roi_mode:
@@ -77,7 +77,7 @@ class InteractionController(QObject):
             self._mark_interaction()
             self._is_panning = True
             self._last_mouse_pos = event.position().toPoint()
-            self._view.setCursor(Qt.ClosedHandCursor)
+            self._view.setCursor(Qt.CursorShape.ClosedHandCursor)
         return True
 
     def handle_mouse_move(self, event):
@@ -97,7 +97,7 @@ class InteractionController(QObject):
             self.viewport_changed.emit()
 
     def handle_mouse_release(self, event):
-        if event.button() != Qt.LeftButton:
+        if event.button() != Qt.MouseButton.LeftButton:
             return
 
         if self._is_roi_mode and self._roi_start_pos is not None:
@@ -107,7 +107,7 @@ class InteractionController(QObject):
             self._roi_start_pos = None
         else:
             self._is_panning = False
-            self._view.setCursor(Qt.ArrowCursor)
+            self._view.setCursor(Qt.CursorShape.ArrowCursor)
             self._idle_timer.start()
             self.viewport_changed.emit()
 

@@ -28,19 +28,19 @@ class GalleryItemWidget(QWidget):
         font.setPointSize(12)
         self.lbl_index.setFont(font)
         self.lbl_index.setFixedWidth(25)
-        self.lbl_index.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.lbl_index.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
 
         # 2. 图片标签 (初始状态)
         self.lbl_image = QLabel("Loading...")
         self.lbl_image.setFixedSize(128, 128)
-        self.lbl_image.setAlignment(Qt.AlignCenter)
+        self.lbl_image.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.lbl_image.setStyleSheet(
             "background-color: #f0f0f0; color: #888; border: 1px solid #ddd;"
         )
 
         # 3. 置信度文本标签
         self.lbl_conf = QLabel("")
-        self.lbl_conf.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.lbl_conf.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
 
         layout.addWidget(self.lbl_index)
         layout.addWidget(self.lbl_image)
@@ -66,7 +66,7 @@ class LesionGallery(QDockWidget):
         super().__init__("病灶画廊 (Top 50)", parent)
         # 设置允许停靠区域
         self.setAllowedAreas(
-            Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea | Qt.BottomDockWidgetArea
+            Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea | Qt.DockWidgetArea.BottomDockWidgetArea
         )
 
         # 设置最小宽度以防止内容遮挡
@@ -74,13 +74,13 @@ class LesionGallery(QDockWidget):
 
         # 停靠时不显示关闭按钮，浮动时显示
         self.setFeatures(
-            QDockWidget.DockWidgetFloatable | QDockWidget.DockWidgetMovable
+            QDockWidget.DockWidgetFeature.DockWidgetFloatable | QDockWidget.DockWidgetFeature.DockWidgetMovable
         )
         self.topLevelChanged.connect(self._on_top_level_changed)
 
         # 初始化垂直列表视图（一行一个，左图右文）
         self.list_widget = QListWidget()
-        self.list_widget.setViewMode(QListWidget.ListMode)
+        self.list_widget.setViewMode(QListView.ViewMode.ListMode)
         self.list_widget.setIconSize(QSize(128, 128))
         self.list_widget.setSpacing(10)
         self.list_widget.itemClicked.connect(self._on_item_clicked)
@@ -94,13 +94,13 @@ class LesionGallery(QDockWidget):
         """悬浮时显示关闭按钮，停靠时隐藏关闭按钮"""
         if floating:
             self.setFeatures(
-                QDockWidget.DockWidgetFloatable
-                | QDockWidget.DockWidgetMovable
-                | QDockWidget.DockWidgetClosable
+                QDockWidget.DockWidgetFeature.DockWidgetFloatable
+                | QDockWidget.DockWidgetFeature.DockWidgetMovable
+                | QDockWidget.DockWidgetFeature.DockWidgetClosable
             )
         else:
             self.setFeatures(
-                QDockWidget.DockWidgetFloatable | QDockWidget.DockWidgetMovable
+                QDockWidget.DockWidgetFeature.DockWidgetFloatable | QDockWidget.DockWidgetFeature.DockWidgetMovable
             )
 
     def closeEvent(self, event):
@@ -128,7 +128,7 @@ class LesionGallery(QDockWidget):
             # 设置尺寸
             list_item.setSizeHint(QSize(300, 140))
             # 存储边界框及属性数据
-            list_item.setData(Qt.UserRole, item)
+            list_item.setData(Qt.ItemDataRole.UserRole, item)
             self.list_widget.addItem(list_item)
 
             # 嵌入自定义排版组件
@@ -147,7 +147,7 @@ class LesionGallery(QDockWidget):
         # 校验列表项索引
         if idx < self.list_widget.count():
             list_item = self.list_widget.item(idx)
-            data = list_item.data(Qt.UserRole)
+            data = list_item.data(Qt.ItemDataRole.UserRole)
 
             # 校验数据一致性
             if data and data.get("bbox") == item_data.get("bbox"):
@@ -161,7 +161,7 @@ class LesionGallery(QDockWidget):
         """
         处理点击事件，发送聚焦信号
         """
-        data = item.data(Qt.UserRole)
+        data = item.data(Qt.ItemDataRole.UserRole)
         if not data:
             return
 

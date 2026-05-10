@@ -88,7 +88,7 @@ class GalleryWorker(QThread):
                     region = bg
 
                 # 缩放至 UI 目标尺寸 (128x128)，减少资源占用
-                resample_filter = getattr(Image, "Resampling", Image).LANCZOS
+                resample_filter = Image.Resampling.LANCZOS
                 thumb = region.resize(
                     (self.target_size, self.target_size), resample_filter
                 )

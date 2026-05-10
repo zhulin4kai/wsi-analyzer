@@ -61,7 +61,7 @@ class SlidePool:
         self._refcounts.pop(path, None)
         self._pending_close.discard(path)
         if engine:
-            engine.close()
+            engine.close()  # type: ignore[union-attr]
 
     def close_all(self):
         with self._lock:

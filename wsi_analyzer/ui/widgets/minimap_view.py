@@ -44,10 +44,10 @@ class MinimapView(QGraphicsView):
         self._is_dragging = False
 
         # 优化渲染与隐藏滚动条
-        self.setRenderHint(QPainter.Antialiasing)
-        self.setRenderHint(QPainter.SmoothPixmapTransform)
-        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setRenderHint(QPainter.RenderHint.Antialiasing)
+        self.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
         # 1. 底图层 (静态缩略图)
         self.bg_item = QGraphicsPixmapItem()
@@ -95,7 +95,7 @@ class MinimapView(QGraphicsView):
         self.setFixedSize(target_w, target_h)
 
         self.scene_canvas.setSceneRect(0, 0, img_w, img_h)
-        self.fitInView(self.scene_canvas.sceneRect(), Qt.KeepAspectRatio)
+        self.fitInView(self.scene_canvas.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
 
         self.setVisible(True)
 
@@ -116,7 +116,7 @@ class MinimapView(QGraphicsView):
                 target_w = int(max_size * (img_w / img_h))
 
             self.setFixedSize(target_w, target_h)
-            self.fitInView(self.scene_canvas.sceneRect(), Qt.KeepAspectRatio)
+            self.fitInView(self.scene_canvas.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
         self.size_scale_changed.emit(scale)
 
     def contextMenuEvent(self, event):
@@ -137,7 +137,7 @@ class MinimapView(QGraphicsView):
         """视图尺寸改变时调整内容显示"""
         super().resizeEvent(event)
         if self.scene() and not self.scene().sceneRect().isEmpty():
-            self.fitInView(self.scene().sceneRect(), Qt.KeepAspectRatio)
+            self.fitInView(self.scene().sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
 
     def update_indicator(self, level0_rect: QRectF):
         """主视图同步至鹰眼图"""
@@ -154,7 +154,7 @@ class MinimapView(QGraphicsView):
 
     def mousePressEvent(self, event):
         """鹰眼图鼠标按下：记录拖拽起点并发射轻量导航信号"""
-        if event.button() == Qt.LeftButton:
+        if event.button() == Qt.MouseButton.LeftButton:
             self._is_dragging = True
 
             # 控件坐标转换为 Scene 坐标
@@ -171,7 +171,7 @@ class MinimapView(QGraphicsView):
 
     def mouseMoveEvent(self, event):
         """鹰眼图拖拽：持续发射轻量导航信号，不触发高清渲染"""
-        if self._is_dragging and (event.buttons() & Qt.LeftButton):
+        if self._is_dragging and (event.buttons() & Qt.MouseButton.LeftButton):
             if self.downsample_factor <= 0:
                 return
 
@@ -185,7 +185,7 @@ class MinimapView(QGraphicsView):
 
     def mouseReleaseEvent(self, event):
         """鹰眼图释放：结束拖拽，发射完整导航信号以触发高清渲染"""
-        if event.button() == Qt.LeftButton and self._is_dragging:
+        if event.button() == Qt.MouseButton.LeftButton and self._is_dragging:
             self._is_dragging = False
 
             scene_pos = self.mapToScene(event.position().toPoint())

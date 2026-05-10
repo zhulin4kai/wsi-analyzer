@@ -32,7 +32,7 @@ class AIAnalysisWorker(QThread):
                 model_path=self.model_path,
             )
 
-            result = self.analysis_handle.service.run(
+            result = self.analysis_handle.service.run(  # type: ignore[union-attr]
                 resume_data=self.resume_data,
                 progress_callback=lambda p: self.progress_updated.emit(p),
                 status_callback=lambda s: self.status_updated.emit(s),

@@ -84,7 +84,7 @@ class FullSlideAnalysisService:
         if resume_data and resume_data.get("valid_coords"):
             valid_coords_for_result = list(raw_coords)
             patch_coords = [
-                PatchCoordinate(x=c[0], y=c[1], size=0, level=0, downsample=0)
+                PatchCoordinate(x=c[0], y=c[1], size=0, level=0, downsample=0)  # type: ignore[index]
                 for c in raw_coords
             ]
         else:
