@@ -4,23 +4,36 @@ from wsi_analyzer.domain.slide.coordinates import PatchCoordinate
 
 
 class PatchReader:
-    def __init__(self, engine, target_level: int, target_downsample: float, patch_size: int):
+    """Read a physical patch from a WSI engine using PatchCoordinate geometry.
+
+    The scale interpretation is driven entirely by the PatchCoordinate:
+      - coord.x, coord.y      → Level-0 top-left origin.
+      - coord.level0_size     → physical side length on Level-0.
+      - coord.read_level      → OpenSlide pyramid level.
+      - coord.read_downsample → downsample of read_level relative to Level-0.
+      - coord.model_input_size → final resize target (square).
+
+    The resulting PIL.Image is always resized to model_input_size x model_input_size.
+    """
+
+    def __init__(self, engine):
         self._engine = engine
-        self._target_level = target_level
-        self._target_downsample = target_downsample
-        self._patch_size = patch_size
-        _resample = Image.Resampling.LANCZOS
-        self._resample = _resample
+        self._resample = Image.Resampling.LANCZOS
 
     def read(self, coord: PatchCoordinate) -> Image.Image:
-        x, y = coord.x, coord.y
-        if self._target_level == 0:
-            patch_rgba = self._engine.read_region((x, y), 0, (self._patch_size, self._patch_size))
-            return patch_rgba.convert("RGB")
+        read_size = max(1, round(coord.level0_size / coord.read_downsample))
 
-        ts = max(1, int(self._patch_size / self._target_downsample))
-        patch_rgba = self._engine.read_region((x, y), self._target_level, (ts, ts))
+        patch_rgba = self._engine.read_region(
+            (coord.x, coord.y),
+            coord.read_level,
+            (read_size, read_size),
+        )
         patch_rgb = patch_rgba.convert("RGB")
-        if patch_rgb.size != (self._patch_size, self._patch_size):
-            patch_rgb = patch_rgb.resize((self._patch_size, self._patch_size), self._resample)
+
+        if patch_rgb.size != (coord.model_input_size, coord.model_input_size):
+            patch_rgb = patch_rgb.resize(
+                (coord.model_input_size, coord.model_input_size),
+                self._resample,
+            )
+
         return patch_rgb

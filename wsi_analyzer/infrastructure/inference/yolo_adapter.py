@@ -16,15 +16,19 @@ class YOLOAdapter(BaseModelAdapter):
     def _load_model(self, model_path: str) -> Any:
         if not _ULTRALYTICS_AVAILABLE or _YOLO is None:
             raise ImportError(
-                f"加载 '{os.path.basename(model_path)}' 需要 ultralytics，当前环境未安装。"
+                f"Loading '{os.path.basename(model_path)}' requires ultralytics."
             )
         return _YOLO(model_path)
 
     def predict(
-        self, batch_imgs: List[Image.Image], device: str, conf_thresh: float
+        self, batch_imgs: List[Image.Image], device: str, conf_thresh: float,
+        imgsz: int | None = None,
     ) -> List[Tuple[np.ndarray, np.ndarray, np.ndarray]]:
-        results = self.model(batch_imgs, verbose=False, device=device, conf=conf_thresh)
-        batch_results = []
+        kwargs = dict(verbose=False, device=device, conf=conf_thresh)
+        if imgsz is not None:
+            kwargs["imgsz"] = imgsz
+        results = self.model(batch_imgs, **kwargs)  # type: ignore[arg-type]
+        batch_results: List[Tuple] = []
         for result in results:
             if len(result.boxes) == 0:
                 batch_results.append((np.array([]), np.array([]), np.array([])))
@@ -43,5 +47,5 @@ class YOLOAdapter(BaseModelAdapter):
             if isinstance(imgsz, (list, tuple)) and len(imgsz) > 0:
                 return int(imgsz[0])
         except Exception as e:
-            logger.warning(f"无法从 YOLO 模型提取 Patch Size: {e}")
+            logger.warning(f"Cannot extract patch size from YOLO model: {e}")
         return 512

@@ -33,18 +33,59 @@ class Level0Box:
 
 @dataclass(frozen=True)
 class PatchCoordinate:
+    """A single inference patch in WSI Level-0 coordinates.
+
+    Fields:
+        x, y:             Top-left origin in Level-0 pixels.
+        level0_size:      Side length of the physical region covered on Level-0.
+        model_input_size: Side length of the image tensor fed to the model.
+        read_level:       OpenSlide pyramid level for I/O.
+        read_downsample:  Downsample factor of read_level vs Level-0.
+    """
+
     x: int
     y: int
-    size: int
+    level0_size: int
+    model_input_size: int
     read_level: int
-    read_level_downsample: float
+    read_downsample: float
 
     @property
-    def level0_origin(self) -> tuple:
+    def level0_origin(self) -> tuple[int, int]:
         return self.x, self.y
 
+    @property
+    def level0_box(self) -> Level0Box:
+        return Level0Box(
+            x1=float(self.x),
+            y1=float(self.y),
+            x2=float(self.x + self.level0_size),
+            y2=float(self.y + self.level0_size),
+        )
+
+    @property
+    def local_to_level0_scale(self) -> float:
+        return self.level0_size / self.model_input_size
+
+    # ----- backward-compat aliases for code that still uses old field names -----
+
+    @property
+    def size(self) -> int:
+        """Deprecated: use level0_size or model_input_size explicitly."""
+        return self.level0_size
+
+    @property
+    def level(self) -> int:
+        """Deprecated: use read_level."""
+        return self.read_level
+
+    @property
+    def downsample(self) -> float:
+        """Deprecated: use read_downsample."""
+        return self.read_downsample
+
     def level0_width(self) -> float:
-        return self.size * self.read_level_downsample
+        return float(self.level0_size)
 
     def level0_height(self) -> float:
-        return self.size * self.read_level_downsample
+        return float(self.level0_size)

@@ -24,7 +24,8 @@ class BaseModelAdapter(abc.ABC):
 
     @abc.abstractmethod
     def predict(
-        self, batch_imgs: List[Image.Image], device: str, conf_thresh: float
+        self, batch_imgs: List[Image.Image], device: str, conf_thresh: float,
+        imgsz: int | None = None,
     ) -> List[Tuple[np.ndarray, np.ndarray, np.ndarray]]:
         pass
 

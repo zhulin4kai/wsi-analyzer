@@ -9,12 +9,14 @@ from wsi_analyzer.infrastructure.logging import logger
 
 
 class BatchInferencer:
-    def __init__(self, model_adapter, patch_reader, device: str, batch_size: int, conf_thresh: float):
+    def __init__(self, model_adapter, patch_reader, device: str, batch_size: int,
+                 conf_thresh: float, model_input_size: int):
         self._adapter = model_adapter
         self._reader = patch_reader
         self._device = device
         self._batch_size = batch_size
         self._conf_thresh = conf_thresh
+        self._model_input_size = model_input_size
 
     @property
     def batch_size(self) -> int:
@@ -36,7 +38,7 @@ class BatchInferencer:
         processed = 0
         i = 0
 
-        pbar = tqdm(total=len(coords), desc="推理进度")
+        pbar = tqdm(total=len(coords), desc="inference")
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
             while i < len(coords):
@@ -50,14 +52,15 @@ class BatchInferencer:
 
                 try:
                     results = self._adapter.predict(
-                        batch_imgs, device=self._device, conf_thresh=self._conf_thresh
+                        batch_imgs, device=self._device, conf_thresh=self._conf_thresh,
+                        imgsz=self._model_input_size,
                     )
                 except RuntimeError as e:
                     if self._batch_size <= 1:
-                        raise RuntimeError("Batch Size 已降至 1 但显存仍不足") from e
+                        raise RuntimeError("Batch size 1 still OOM") from e
                     if not OOMRetryPolicy.is_oom(e):
                         raise e
-                    logger.warning("发生显存溢出 (OOM)，正在缩减 Batch Size 进行重试")
+                    logger.warning("OOM detected, reducing batch size for retry")
                     self._batch_size = OOMRetryPolicy.next_batch_size(self._batch_size)
                     i -= len(batch_coords)
                     continue
