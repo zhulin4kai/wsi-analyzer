@@ -109,7 +109,7 @@ class InfoBarOverlay(QWidget):
                 self._rgb_text = f"R {r:3d}  G {g:3d}  B {b:3d}"
                 self._rgb_color = QColor(r, g, b)
                 self.update()
-        except Exception:
+        except (OSError, ValueError):
             pass
 
     # ── 绘制 ──────────────────────────────────────────────────────────────

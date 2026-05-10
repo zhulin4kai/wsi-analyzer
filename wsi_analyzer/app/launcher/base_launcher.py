@@ -1,5 +1,6 @@
 import multiprocessing
 import sys
+from queue import Empty
 from typing import Callable
 
 from .splash_ui import SplashUI
@@ -48,7 +49,7 @@ class AppLauncher:
             try:
                 msg = self.msg_queue.get_nowait()
                 self.splash.update_text(msg)
-            except Exception:
+            except Empty:
                 pass
 
         # 2. 检查Qt是否完全加载并渲染完成

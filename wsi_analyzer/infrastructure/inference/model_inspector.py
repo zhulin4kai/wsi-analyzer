@@ -20,5 +20,5 @@ class ModelInspector:
             return None
         except ImportError:
             return None
-        except Exception:
+        except (RuntimeError, ValueError, OSError):
             return None

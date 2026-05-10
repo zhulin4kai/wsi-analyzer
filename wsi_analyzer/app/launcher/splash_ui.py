@@ -6,6 +6,8 @@ try:
 
     HAS_PIL = True
 except ImportError:
+    Image = None
+    ImageTk = None
     HAS_PIL = False
 
 
@@ -27,23 +29,23 @@ class SplashUI:
             try:
                 # Windows 8.1+
                 ctypes.windll.shcore.SetProcessDpiAwareness(1)
-            except Exception:
+            except (OSError, AttributeError):
                 try:
                     # Windows Vista/7/8
                     ctypes.windll.user32.SetProcessDPIAware()
-                except Exception:
+                except (OSError, AttributeError):
                     pass
 
         # 确保任务栏图标分组一致并显示独立图标
-        if os.name == "nt":
-            try:
+            if os.name == "nt":
                 import ctypes
 
-                ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
-                    "wsianalyzer.app.v0.0.1"
-                )
-            except Exception:
-                pass
+                try:
+                    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+                        "wsianalyzer.app.v0.0.1"
+                    )
+                except (OSError, AttributeError):
+                    pass
 
         self.root = tk.Tk()
 
@@ -57,7 +59,7 @@ class SplashUI:
         if os.path.exists(icon_path):
             try:
                 self.root.iconbitmap(icon_path)
-            except Exception:
+            except tk.TclError:
                 pass
 
         # 移除窗口边框和标题栏
@@ -111,7 +113,7 @@ class SplashUI:
                 self.image_ref = ImageTk.PhotoImage(img)
 
                 self.canvas.create_image(0, 0, anchor="nw", image=self.image_ref)
-            except Exception as e:
+            except (OSError, ValueError) as e:
                 print(f"SplashUI failed to load image: {e}")
         else:
             # 后备背景（图片加载失败时显示）

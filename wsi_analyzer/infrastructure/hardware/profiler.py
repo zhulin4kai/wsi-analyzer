@@ -30,9 +30,7 @@ class HardwareProfiler:
             if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
                 return "mps"
         except ImportError:
-            pass
-        except Exception:
-            pass
+            torch = None
         return "cpu"
 
     @staticmethod
@@ -54,7 +52,7 @@ class HardwareProfiler:
                 free_mb = info.free / (1024 * 1024)
                 pynvml.nvmlShutdown()
                 return total_mb, free_mb
-            except Exception:
+            except (ImportError, OSError):
                 pass
 
             try:
@@ -66,7 +64,7 @@ class HardwareProfiler:
                 if result.returncode == 0:
                     parts = result.stdout.strip().split("\n")[0].split(",")
                     return float(parts[0].strip()), float(parts[1].strip())
-            except Exception:
+            except (ImportError, OSError):
                 pass
 
             return 0.0, 0.0

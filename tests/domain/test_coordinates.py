@@ -1,3 +1,5 @@
+from dataclasses import FrozenInstanceError
+
 from wsi_analyzer.domain.slide.coordinates import Level0Box, Level0Point, PatchCoordinate
 
 
@@ -12,7 +14,7 @@ class TestLevel0Point:
         try:
             setattr(p, 'x', 1)
             assert False, "should raise"
-        except Exception:
+        except (FrozenInstanceError, AttributeError):
             pass
 
 
@@ -34,7 +36,7 @@ class TestLevel0Box:
         try:
             setattr(b, 'x1', 99)
             assert False, "should raise"
-        except Exception:
+        except (FrozenInstanceError, AttributeError):
             pass
 
     def test_translate(self):
@@ -66,5 +68,5 @@ class TestPatchCoordinate:
         try:
             setattr(pc, 'x', 99)
             assert False, "should raise"
-        except Exception:
+        except (FrozenInstanceError, AttributeError):
             pass

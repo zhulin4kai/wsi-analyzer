@@ -54,7 +54,7 @@ def _configure_windows_app_id() -> None:
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
             "wsianalyzer.app.v0.0.1"
         )
-    except Exception:
+    except (OSError, AttributeError):
         pass
 
 

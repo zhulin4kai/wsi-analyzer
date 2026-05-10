@@ -1,4 +1,4 @@
-import numpy as np
+from dataclasses import FrozenInstanceError
 
 from wsi_analyzer.domain.analysis.result import AnalysisResult
 from wsi_analyzer.domain.detection.entities import Detection
@@ -18,7 +18,7 @@ class TestDetection:
         try:
             setattr(d, 'confidence', 1.0)
             assert False, "should raise"
-        except Exception:
+        except (FrozenInstanceError, AttributeError):
             pass
 
 

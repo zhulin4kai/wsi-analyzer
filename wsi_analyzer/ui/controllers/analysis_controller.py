@@ -143,7 +143,7 @@ class AnalysisController:
         if self.progress_dialog:
             try:
                 self.progress_dialog.canceled.disconnect(self.cancel_ai_analysis)
-            except Exception:
+            except (TypeError, RuntimeError):
                 pass
 
         msg_box = QMessageBox(w)
@@ -151,7 +151,7 @@ class AnalysisController:
         msg_box.setText("确定要中断当前的 AI 分析吗？进度将被保存。")
         msg_box.setIcon(QMessageBox.Question)
         btn_yes = msg_box.addButton("是", QMessageBox.ActionRole)
-        btn_no = msg_box.addButton("否", QMessageBox.ActionRole)
+        msg_box.addButton("否", QMessageBox.ActionRole)
         msg_box.exec()
 
         if msg_box.clickedButton() == btn_yes:
