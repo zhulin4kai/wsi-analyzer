@@ -1,0 +1,23 @@
+# Model metadata sidecar for micropapillary YOLOv8 model.
+# Place this file alongside best.pt as best.model.yaml.
+# The inference backend reads it automatically when the model is selected.
+
+model_name: micropapillary_yolov8
+backend: ultralytics_yolo
+task: detect
+
+# -- inference geometry --
+model_input_size: 768        # YOLO imgsz (model input side length in px)
+target_mpp: 0.1725           # microns/pixel the model was trained on
+coordinate_system: level0
+trained_level: 0
+
+# -- class labels --
+classes:
+  0: micropapillary
+
+# -- training data info (optional) --
+dataset:
+  name: xuzhou_fourth_hospital_micropapillary
+  slide_mpp: 0.1725
+  annotation_format: geojson

@@ -4,18 +4,49 @@ from wsi_analyzer.config import config
 from wsi_analyzer.application.analysis.analysis_config import InferenceScaleConfig
 from wsi_analyzer.application.analysis.auto_tune_service import AutoTuneService
 from wsi_analyzer.infrastructure.hardware import HardwareProfiler
+from wsi_analyzer.infrastructure.inference.model_metadata_loader import ModelMetadataLoader
+from wsi_analyzer.infrastructure.logging import logger
 
 
 class AnalysisConfigResolver:
     def __init__(self, db):
         self._db = db
+        self._metadata_loader = ModelMetadataLoader()
 
     def resolve(self, svs_path: str, model_path: str) -> InferenceScaleConfig:
-        patch_size = self._db.get_setting("ai_patch_size", config.AI_PATCH_SIZE)
+        meta = self._metadata_loader.load(model_path)
+
+        # ── model_input_size priority ────────────────────────────────
+        # 1. sidecar metadata
+        # 2. YOLO checkpoint imgsz
+        # 3. DB ai_patch_size
+        # 4. config default
+        if meta is not None:
+            model_input_size = meta.model_input_size
+            meta_source = "sidecar"
+        else:
+            model_input_size = self._db.get_setting("ai_patch_size", config.AI_PATCH_SIZE)
+            meta_source = None
+
+        # ── target_mpp priority ──────────────────────────────────────
+        # 1. sidecar metadata
+        # 2. DB ai_model_target_mpp
+        # 3. config default
+        if meta is not None:
+            target_mpp = meta.target_mpp
+        else:
+            target_mpp = float(
+                self._db.get_setting("ai_model_target_mpp", config.AI_MODEL_TARGET_MPP)
+            )
+            logger.warning(
+                "No model metadata sidecar found for %s; "
+                "target_mpp=%.4f from DB/default may be unreliable",
+                os.path.basename(model_path), target_mpp,
+            )
+
         stride = self._db.get_setting("ai_stride", config.AI_STRIDE)
         nms_iou_thresh = self._db.get_setting("ai_nms_iou_thresh", config.AI_NMS_IOU_THRESH)
         conf_thresh = self._db.get_setting("ai_conf_thresh", config.AI_CONF_THRESH)
-        target_mpp = float(self._db.get_setting("ai_model_target_mpp", config.AI_MODEL_TARGET_MPP))
 
         drive_prefix = HardwareProfiler.get_storage_key(svs_path)
         profile = self._db.get_system_profile(drive_prefix)
@@ -28,7 +59,7 @@ class AnalysisConfigResolver:
             batch_size = 16
 
         analysis_config = InferenceScaleConfig.from_raw(
-            patch_size=patch_size, stride=stride,
+            patch_size=model_input_size, stride=stride,
             nms_iou_thresh=nms_iou_thresh, conf_thresh=conf_thresh,
             device=device, batch_size=batch_size, target_mpp=target_mpp,
             patch_size_min=getattr(config, "AI_PATCH_SIZE_MIN", 128),
@@ -45,6 +76,9 @@ class AnalysisConfigResolver:
         if self._db.get_auto_tune_enabled():
             io_speed = profile.get("io_speed", 50.0) if profile else 50.0
             model_size_mb = os.path.getsize(model_path) / (1024 * 1024)
-            analysis_config = AutoTuneService.apply(analysis_config, io_speed, model_size_mb)
+            analysis_config = AutoTuneService.apply(
+                analysis_config, io_speed, model_size_mb,
+                has_metadata=(meta is not None),
+            )
 
         return analysis_config

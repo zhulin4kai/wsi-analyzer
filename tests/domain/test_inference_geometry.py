@@ -51,3 +51,15 @@ class TestInferenceGeometry:
         g = _make_geom(sm=0.5, op=40.0)
         assert g.slide_mpp == 0.5  # not overridden
         assert g.level0_window_size == 2048
+
+    def test_micropapillary_metadata_scenario(self):
+        """model_input=768, target_mpp=0.1725, slide_mpp=0.25
+        -> level0_window = round(768 * 0.1725 / 0.25) = 530
+        """
+        g = _make_geom(mi=768, tm=0.1725, sm=0.25, st=530, rl=1, rd=4.0)
+        assert g.model_input_size == 768
+        assert g.target_mpp == 0.1725
+        assert g.slide_mpp == 0.25
+        assert g.level0_window_size == 530
+        assert abs(g.local_to_level0_scale - 0.690) < 0.01
+        assert g.level0_stride == 530

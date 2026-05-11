@@ -64,7 +64,22 @@ class AnalysisServiceFactory:
             read_level=read_level,
             read_downsample=read_downsample,
         )
-        logger.info(f"[*] geometry: {geometry}")
+        logger.info(
+            f"[*] model_input_size=%d, target_mpp=%.4f",
+            geometry.model_input_size, geometry.target_mpp,
+        )
+        logger.info(
+            f"[*] slide_mpp=%s",
+            f"{geometry.slide_mpp:.4f}" if geometry.slide_mpp else "None",
+        )
+        logger.info(
+            f"[*] level0_window_size=%d, local_to_level0_scale=%.3f",
+            geometry.level0_window_size, geometry.local_to_level0_scale,
+        )
+        logger.info(
+            f"[*] read_level=%d, read_downsample=%.1f",
+            geometry.read_level, geometry.read_downsample,
+        )
 
         reader = PatchReader(engine)
         inferencer = BatchInferencer(
