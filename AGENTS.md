@@ -91,6 +91,7 @@ ui/             → app/ (for DI), workers/
 - **Heatmap computation** is in `domain/detection/heatmap.py` (pure numpy/cv2). UI `HeatmapLayer` only handles `rgba → QPixmap`.
 - **Model introspection** goes through `infrastructure/inference/model_inspector.py` — UI never imports ultralytics directly.
 - **Protected members** (`_xxx`) should not be called across class boundaries. Use public equivalents.
+- **PySide6, not PyQt5**: All Qt enums must use the PySide6 namespaced form. `Qt.AlignCenter` is wrong; `Qt.AlignmentFlag.AlignCenter` is correct. Every enum value lives under a named enum class. Before writing any Qt constant, verify the path with `python -c "from PySide6.QtCore import Qt; print(Qt.AlignmentFlag.AlignCenter)"`. If you are unsure, search the codebase for existing usages of the same enum.
 
 ### Critical files
 
