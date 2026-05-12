@@ -33,7 +33,7 @@ from wsi_analyzer.shared import extract_wsi_paths_from_mime
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("智能 WSI 病理切片辅助诊断系统 - WSIAnalyzer")
+        self.setWindowTitle("病理全尺寸切片辅助诊断系统")
         self.resize(1440, 900)
         self.setAcceptDrops(True)
 

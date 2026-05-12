@@ -50,7 +50,7 @@ class EvaluationMetrics:
     ap50: Optional[float] = None
 
 
-@dataclass(frozen=True)
+@dataclass
 class EvaluationResult:
     slide_id: str
     iou_threshold: float
