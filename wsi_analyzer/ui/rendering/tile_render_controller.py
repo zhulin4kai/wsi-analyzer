@@ -43,12 +43,12 @@ class TileRenderController:
         if not requests:
             return
 
-        best_level = requests[0].read_level
+        best_level = requests[0].level
         self._hide_coarse_tiles(best_level)
         self.render_version += 1
 
         for req in requests:
-            key = (req.read_level, req.col, req.row)
+            key = (req.level, req.col, req.row)
 
             # Level 1: scene-item LRU cache (no I/O)
             cached_item = self.tile_cache.get(key)
@@ -60,11 +60,11 @@ class TileRenderController:
 
             # Level 2: cross-slide pixel data cache (no I/O)
             cached_qimg = container.image_server.get_tile(
-                self.active_path, req.read_level, req.col, req.row
+                self.active_path, req.level, req.col, req.row
             )
             if cached_qimg is not None:
                 self._add_tile_to_scene(
-                    cached_qimg, req.read_level, req.col, req.row,
+                    cached_qimg, req.level, req.col, req.row,
                     req.x, req.y, req.scale,
                 )
                 continue
@@ -72,7 +72,7 @@ class TileRenderController:
             # Level 3: dispatch background I/O task
             self.render_worker.request_render(
                 self.active_path,
-                req.read_level, req.col, req.row,
+                req.level, req.col, req.row,
                 req.x, req.y, req.width, req.height,
                 req.scale,
                 self.render_version,
