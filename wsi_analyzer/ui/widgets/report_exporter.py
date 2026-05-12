@@ -1,8 +1,11 @@
 import csv
 import json
 import os
+from datetime import datetime
 
 from PySide6.QtWidgets import QFileDialog, QMessageBox
+
+_DISCLAIMER = "本结果由 AI 模型自动生成，仅用于辅助检测和病理医生复核参考，不作为最终病理诊断依据。"
 
 
 class ReportExporter:
@@ -59,10 +62,12 @@ class ReportExporter:
                     writer = csv.writer(f)
 
                     # 写入总览信息
-                    writer.writerow(["=== 智能病理辅助诊断报告 ==="])
+                    writer.writerow(["=== AI辅助检测报告 ==="])
                     writer.writerow(["分析文件", current_wsi_path])
+                    writer.writerow(["生成时间", datetime.now().isoformat()])
                     writer.writerow(["病灶总数", total_lesions])
                     writer.writerow(["平均置信度", f"{avg_conf:.2%}"])
+                    writer.writerow(["免责声明", _DISCLAIMER])
                     writer.writerow(
                         ["最高置信度", f"{max_conf:.2%} (坐标: {max_conf_bbox})"]
                     )
@@ -89,6 +94,8 @@ class ReportExporter:
             elif save_path.endswith(".json"):
                 # JSON 格式导出
                 export_data = {
+                    "report_type": "AI辅助检测报告",
+                    "disclaimer": _DISCLAIMER,
                     "summary": {
                         "file": current_wsi_path,
                         "total_lesions": total_lesions,
@@ -124,8 +131,11 @@ class ReportExporter:
                             "coordinates": [polygon_coords],  # 注意这里是三层嵌套数组
                         },
                         "properties": {
-                            "objectType": "annotation",  # QuPath 识别为标注
+                            "source": "ai_prediction",
+                            "report_type": "AI辅助检测结果",
+                            "objectType": "annotation",
                             "classification": {"name": f"Class {item['class_id']}"},
+                            "confidence": round(item["confidence"], 4),
                             "measurements": [
                                 {
                                     "name": "Confidence",

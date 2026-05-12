@@ -52,7 +52,7 @@ class MainMenuBuilder:
 
         file_menu.addSeparator()
 
-        export_menu = file_menu.addMenu("导出诊断报告")
+        export_menu = file_menu.addMenu("导出 AI 辅助检测报告")
         export_menu.addAction("导出为 CSV").triggered.connect(
             lambda: window.export_report("csv")
         )
