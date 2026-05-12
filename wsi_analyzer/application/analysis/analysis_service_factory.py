@@ -80,6 +80,7 @@ class AnalysisServiceFactory:
             f"[*] read_level=%d, read_downsample=%.1f",
             geometry.read_level, geometry.read_downsample,
         )
+        _log_mpp_warnings(geometry, model_path)
 
         reader = PatchReader(engine)
         inferencer = BatchInferencer(
@@ -112,3 +113,22 @@ class AnalysisServiceFactory:
             slide_path=svs_path, service=service, session=session,
             adapter=adapter, image_server=self._image_server,
         )
+
+
+def _log_mpp_warnings(geometry, model_path):
+    slide_mpp = geometry.slide_mpp
+    target_mpp = geometry.target_mpp
+
+    if slide_mpp is None:
+        logger.warning(
+            "[WARNING] 当前切片缺少 MPP 信息，系统将使用默认尺度参数，"
+            "检测结果可能存在尺度偏差。"
+        )
+    elif target_mpp is not None and target_mpp > 0:
+        ratio = abs(slide_mpp - target_mpp) / target_mpp
+        if ratio > 0.25:
+            logger.warning(
+                "[WARNING] 当前切片 MPP=%.4f 与模型 training MPP=%.4f 差异较大 (%.1f%%)，"
+                "系统已进行尺度换算，请复核检测结果。",
+                slide_mpp, target_mpp, ratio * 100,
+            )
