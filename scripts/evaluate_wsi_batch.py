@@ -105,7 +105,20 @@ def main():
                 "detection_count": getattr(result, "detection_count", 0),
                 "gt_count": getattr(result, "gt_count", 0),
                 "matches": [
-                    {"status": mx.status, "iou": round(mx.iou, 4)}
+                    {
+                        "status": mx.status, "iou": round(mx.iou, 4),
+                        "prediction": (
+                            {"x1": mx.prediction.x1, "y1": mx.prediction.y1,
+                             "x2": mx.prediction.x2, "y2": mx.prediction.y2,
+                             "confidence": mx.prediction.confidence}
+                            if mx.prediction else None
+                        ),
+                        "ground_truth": (
+                            {"x1": mx.ground_truth.x1, "y1": mx.ground_truth.y1,
+                             "x2": mx.ground_truth.x2, "y2": mx.ground_truth.y2}
+                            if mx.ground_truth else None
+                        ),
+                    }
                     for mx in result.matches
                 ],
             }

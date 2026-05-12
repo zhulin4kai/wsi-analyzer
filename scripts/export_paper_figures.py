@@ -37,6 +37,8 @@ def main():
 
     os.makedirs(args.out_dir, exist_ok=True)
 
+    slide_id = os.path.splitext(os.path.basename(args.wsi))[0]
+
     # Load predictions
     with open(args.prediction, "r", encoding="utf-8") as f:
         pred_data = json.load(f)
@@ -49,6 +51,7 @@ def main():
     # Load eval details
     with open(args.eval, "r", encoding="utf-8") as f:
         eval_data = json.load(f)
+    slide_eval = eval_data.get(slide_id, {})
 
     # Get WSI thumbnail
     engine = container.image_server.acquire_engine(args.wsi)
@@ -74,7 +77,7 @@ def main():
 
         # 04: GT vs pred overlay
         out = os.path.join(args.out_dir, "04_gt_vs_pred_overlay.png")
-        matches = eval_data.get("matches", [])
+        matches = slide_eval.get("matches", [])
         gt_boxes = []
         for feature in gt_data.get("features", []):
             bbox = _geojson_to_bbox(feature.get("geometry", {}))
