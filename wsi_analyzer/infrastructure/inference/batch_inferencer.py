@@ -39,8 +39,9 @@ class BatchInferencer:
         i = 0
 
         pbar = tqdm(total=len(coords), desc="inference")
+        io_workers = max(1, min(8, self._batch_size))
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=io_workers) as executor:
             while i < len(coords):
                 if cancel_check and cancel_check():
                     break

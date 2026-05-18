@@ -51,10 +51,12 @@ class FullSlideAnalysisService:
             cached_mi = resume_data.get("model_input_size")
             cached_rl = resume_data.get("read_level")
             cached_rd = resume_data.get("read_downsample")
+            cached_stride = resume_data.get("level0_stride")
             if cached_l0 is not None and cached_mi is not None:
                 geom_match = (
                     cached_l0 == geom.level0_window_size
                     and cached_mi == geom.model_input_size
+                    and (cached_stride is None or cached_stride == geom.level0_stride)
                     and (cached_rl is None or cached_rl == geom.read_level)
                     and (cached_rd is None or cached_rd == geom.read_downsample)
                 )
@@ -73,7 +75,10 @@ class FullSlideAnalysisService:
             if status_callback:
                 status_callback("phase 1/4: resume detected, skipping mask generation ...")
             raw_coords = resume_data["valid_coords"]
-            session.processed_count = resume_data.get("processed_patches", 0)
+            session.processed_count = min(
+                int(resume_data.get("processed_patches", 0)),
+                len(raw_coords),
+            )
 
             if "raw_boxes" in resume_data:
                 raw_boxes = list(resume_data["raw_boxes"])
@@ -136,7 +141,9 @@ class FullSlideAnalysisService:
         new_boxes, new_scores, new_classes, current = self._inferencer.infer(
             remaining,
             progress_callback=(
-                lambda p: progress_callback(int((session.processed_count + p) / total_patches * 100))
+                lambda p: progress_callback(
+                    min(100, max(0, int((session.processed_count + p) / total_patches * 100)))
+                )
             ) if progress_callback else None,
             cancel_check=lambda: session.is_cancelled,
         )
