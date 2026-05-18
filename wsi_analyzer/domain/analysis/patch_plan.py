@@ -17,7 +17,7 @@ class PatchPlanner:
         downsample_factor: float,
     ) -> list[PatchCoordinate]:
         """Slide over Level-0 space, emit a PatchCoordinate wherever the
-        patch centre falls on valid tissue mask.
+        patch contains enough tissue area.
 
         Parameters:
             solid_mask:      2D uint8 array (255 = tissue, 0 = background).
@@ -29,16 +29,19 @@ class PatchPlanner:
         win = geom.level0_window_size
         stride = geom.level0_stride
 
-        coords: list[PatchCoordinate] = []
-        for y in range(0, h - win + 1, stride):
-            for x in range(0, w - win + 1, stride):
-                # centre of the Level-0 window
-                cx = x + win / 2
-                cy = y + win / 2
-                mx = min(max(int(cx / downsample_factor), 0), solid_mask.shape[1] - 1)
-                my = min(max(int(cy / downsample_factor), 0), solid_mask.shape[0] - 1)
+        x_positions = _grid_positions(w, win, stride)
+        y_positions = _grid_positions(h, win, stride)
 
-                if solid_mask[my, mx] == 255:
+        coords: list[PatchCoordinate] = []
+        for y in y_positions:
+            for x in x_positions:
+                if _has_tissue(
+                    solid_mask=solid_mask,
+                    x=x,
+                    y=y,
+                    win=win,
+                    downsample_factor=downsample_factor,
+                ):
                     coords.append(PatchCoordinate(
                         x=x,
                         y=y,
@@ -48,3 +51,32 @@ class PatchPlanner:
                         read_downsample=geom.read_downsample,
                     ))
         return coords
+
+
+def _grid_positions(size: int, win: int, stride: int) -> list[int]:
+    if size <= win:
+        return [0]
+    positions = list(range(0, size - win + 1, stride))
+    last = size - win
+    if positions[-1] != last:
+        positions.append(last)
+    return positions
+
+
+def _has_tissue(
+    solid_mask: np.ndarray,
+    x: int,
+    y: int,
+    win: int,
+    downsample_factor: float,
+    min_tissue_ratio: float = 0.01,
+) -> bool:
+    mx1 = min(max(int(x / downsample_factor), 0), solid_mask.shape[1] - 1)
+    my1 = min(max(int(y / downsample_factor), 0), solid_mask.shape[0] - 1)
+    mx2 = min(max(int((x + win) / downsample_factor), mx1 + 1), solid_mask.shape[1])
+    my2 = min(max(int((y + win) / downsample_factor), my1 + 1), solid_mask.shape[0])
+    patch_mask = solid_mask[my1:my2, mx1:mx2]
+    if patch_mask.size == 0:
+        return False
+    tissue_ratio = float(np.count_nonzero(patch_mask == 255)) / float(patch_mask.size)
+    return tissue_ratio >= min_tissue_ratio
