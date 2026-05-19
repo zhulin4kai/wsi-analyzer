@@ -17,6 +17,7 @@ class AnalysisResult:
     raw_classes: Optional[List[int]] = None
     # fields for geometry persistence (for resume compatibility)
     level0_window_size: int = 0
+    level0_stride: int = 0
     model_input_size: int = 0
     read_level: int = 0
     read_downsample: float = 0.0
@@ -43,6 +44,7 @@ class AnalysisResult:
         }
         if self.level0_window_size:
             d["level0_window_size"] = self.level0_window_size
+            d["level0_stride"] = self.level0_stride
             d["model_input_size"] = self.model_input_size
             d["read_level"] = self.read_level
             d["read_downsample"] = self.read_downsample
@@ -67,6 +69,7 @@ class AnalysisResult:
             raw_scores=cache_data.get("raw_scores"),
             raw_classes=cache_data.get("raw_classes"),
             level0_window_size=cache_data.get("level0_window_size", 0),
+            level0_stride=cache_data.get("level0_stride", 0),
             model_input_size=cache_data.get("model_input_size", 0),
             read_level=cache_data.get("read_level", 0),
             read_downsample=cache_data.get("read_downsample", 0.0),

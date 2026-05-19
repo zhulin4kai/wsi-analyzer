@@ -66,6 +66,7 @@ class AnalysisResultBuilder:
             raw_scores=raw_scores,
             raw_classes=raw_classes,
             level0_window_size=geometry.level0_window_size if geometry else 0,
+            level0_stride=geometry.level0_stride if geometry else 0,
             model_input_size=geometry.model_input_size if geometry else 0,
             read_level=geometry.read_level if geometry else 0,
             read_downsample=geometry.read_downsample if geometry else 0.0,
