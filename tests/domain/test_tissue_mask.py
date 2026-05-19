@@ -40,3 +40,20 @@ class TestTissueMaskGenerator:
         img[30:70, 30:70] = [50, 50, 50]
         mask = gen.generate(img)
         assert mask[50, 50] == 255
+
+    def test_hsv_saturation_detects_colored_tissue(self):
+        gen = TissueMaskGenerator(min_area_ratio=0.0, use_hsv_saturation=True)
+        img = np.ones((100, 100, 3), dtype=np.uint8) * 245
+        img[30:70, 30:70] = [190, 60, 120]
+        mask = gen.generate(img)
+        assert mask[50, 50] == 255
+        assert mask[10, 10] == 0
+
+    def test_last_stats_exposed(self):
+        gen = TissueMaskGenerator(min_area_ratio=0.0)
+        img = np.ones((80, 60, 3), dtype=np.uint8) * 240
+        img[20:50, 15:45] = [80, 80, 80]
+        _ = gen.generate(img)
+        stats = gen.last_stats
+        assert "mask_tissue_ratio" in stats
+        assert "component_count" in stats
