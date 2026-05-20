@@ -35,5 +35,4 @@ class PatchReader:
                 (coord.model_input_size, coord.model_input_size),
                 self._resample,
             )
-
         return patch_rgb

@@ -51,12 +51,17 @@ class AnalysisConfigResolver:
         drive_prefix = HardwareProfiler.get_storage_key(svs_path)
         profile = self._db.get_system_profile(drive_prefix)
 
-        if profile:
+        policy = str(getattr(config, "AI_DEVICE_POLICY", "auto")).lower()
+        if policy in {"cuda", "cpu", "mps"}:
+            device = policy
+        elif profile:
             device = profile.get("device", HardwareProfiler.get_compute_device())
             batch_size = profile.get("batch_size", 16)
         else:
             device = HardwareProfiler.get_compute_device()
             batch_size = 16
+        if policy in {"cuda", "cpu", "mps"}:
+            batch_size = profile.get("batch_size", 16) if profile else 16
 
         analysis_config = InferenceScaleConfig.from_raw(
             patch_size=model_input_size, stride=stride,
@@ -72,6 +77,27 @@ class AnalysisConfigResolver:
             conf_max=getattr(config, "AI_CONF_THRESH_MAX", 1.0),
             batch_cap=getattr(config, "BATCH_SIZE_CAP_NVME_SSD", 64),
         )
+        if device == "cpu":
+            cpu_batch = int(getattr(config, "AI_CPU_BATCH_SIZE_DEFAULT", 2))
+            cpu_stride_scale = float(getattr(config, "AI_CPU_STRIDE_SCALE", 1.5))
+            analysis_config = InferenceScaleConfig.from_raw(
+                patch_size=analysis_config.model_input_size,
+                stride=max(analysis_config.level0_stride, int(analysis_config.level0_stride * cpu_stride_scale)),
+                nms_iou_thresh=analysis_config.nms_iou_thresh,
+                conf_thresh=analysis_config.conf_thresh,
+                device=device,
+                batch_size=max(1, min(cpu_batch, analysis_config.batch_size)),
+                target_mpp=analysis_config.target_mpp,
+                patch_size_min=getattr(config, "AI_PATCH_SIZE_MIN", 128),
+                patch_size_max=getattr(config, "AI_PATCH_SIZE_MAX", 4096),
+                stride_min=getattr(config, "AI_STRIDE_MIN", 64),
+                stride_max=getattr(config, "AI_STRIDE_MAX", 4096),
+                iou_min=getattr(config, "AI_NMS_IOU_THRESH_MIN", 0.01),
+                iou_max=getattr(config, "AI_NMS_IOU_THRESH_MAX", 1.0),
+                conf_min=getattr(config, "AI_CONF_THRESH_MIN", 0.01),
+                conf_max=getattr(config, "AI_CONF_THRESH_MAX", 1.0),
+                batch_cap=getattr(config, "BATCH_SIZE_CAP_NVME_SSD", 64),
+            )
 
         if self._db.get_auto_tune_enabled():
             io_speed = profile.get("io_speed", 50.0) if profile else 50.0

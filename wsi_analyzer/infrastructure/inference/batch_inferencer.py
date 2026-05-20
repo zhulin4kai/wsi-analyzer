@@ -1,8 +1,10 @@
 import concurrent.futures
+import time
 from typing import Tuple
 
 from tqdm import tqdm
 
+from wsi_analyzer.config import config
 from wsi_analyzer.infrastructure.inference.oom_policy import OOMRetryPolicy
 from wsi_analyzer.infrastructure.inference.prediction_mapper import PredictionMapper
 from wsi_analyzer.infrastructure.logging import logger
@@ -39,8 +41,13 @@ class BatchInferencer:
         i = 0
 
         pbar = tqdm(total=len(coords), desc="inference")
+        if self._device == "cpu":
+            io_workers = max(1, int(getattr(config, "AI_CPU_IO_WORKERS", 4)))
+        else:
+            io_workers = max(1, min(8, self._batch_size))
+        infer_start = time.perf_counter()
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=io_workers) as executor:
             while i < len(coords):
                 if cancel_check and cancel_check():
                     break
@@ -79,4 +86,11 @@ class BatchInferencer:
                     progress_callback(processed)
 
         pbar.close()
+        elapsed = max(1e-6, time.perf_counter() - infer_start)
+        logger.info(
+            "inference throughput: %.2f patches/s (%d patches, device=%s)",
+            processed / elapsed,
+            processed,
+            self._device,
+        )
         return global_boxes, global_scores, global_classes, processed

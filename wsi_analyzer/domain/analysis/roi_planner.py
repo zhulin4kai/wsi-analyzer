@@ -1,4 +1,5 @@
 from wsi_analyzer.domain.analysis.inference_geometry import InferenceGeometry
+from wsi_analyzer.domain.analysis.patch_plan import _grid_positions, _has_tissue
 from wsi_analyzer.domain.slide.coordinates import PatchCoordinate
 
 
@@ -29,21 +30,32 @@ class ROIPlanner:
         if x_min >= x_max or y_min >= y_max:
             return []
 
+        x_start = min(x_min, max(0, w - win))
+        y_start = min(y_min, max(0, h - win))
+        x_end = min(x_max, w)
+        y_end = min(y_max, h)
+        x_positions = _grid_positions(x_end, win, stride)
+        y_positions = _grid_positions(y_end, win, stride)
+
         seen: set[tuple[int, int]] = set()
         coords: list[PatchCoordinate] = []
-        for y in range(y_min, y_max, stride):
-            for x in range(x_min, x_max, stride):
-                cx = min(x, w - win) if x + win > w else x
-                cy = min(y, h - win) if y + win > h else y
-                cx = max(0, cx)
-                cy = max(0, cy)
+        for y in y_positions:
+            if y < y_start:
+                continue
+            for x in x_positions:
+                if x < x_start:
+                    continue
+                cx = x
+                cy = y
 
                 if solid_mask is not None:
-                    centre_x = cx + win / 2
-                    centre_y = cy + win / 2
-                    mx = min(max(int(centre_x / downsample_factor), 0), solid_mask.shape[1] - 1)
-                    my = min(max(int(centre_y / downsample_factor), 0), solid_mask.shape[0] - 1)
-                    if solid_mask[my, mx] != 255:
+                    if not _has_tissue(
+                        solid_mask=solid_mask,
+                        x=cx,
+                        y=cy,
+                        win=win,
+                        downsample_factor=downsample_factor,
+                    ):
                         continue
 
                 key = (cx, cy)

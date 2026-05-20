@@ -90,13 +90,17 @@ class AnalysisServiceFactory:
         )
 
         mask_generator = TissueMaskGenerator(
-            min_area_ratio=getattr(config, "AI_MIN_AREA_RATIO", 0.001)
+            min_area_ratio=getattr(config, "AI_MIN_AREA_RATIO", 0.001),
+            min_tissue_ratio=getattr(config, "AI_MIN_TISSUE_RATIO", 0.005),
+            use_hsv_saturation=getattr(config, "AI_MASK_USE_HSV_SATURATION", True),
+            blur_kernel_size=getattr(config, "AI_MASK_BLUR_KERNEL", 5),
         )
 
         coordinate_service = AnalysisCoordinateService(
             mask_generator=mask_generator,
             geometry=geometry,
             slide_port=slide_port,
+            device=analysis_config.device,
         )
 
         session = AnalysisSession(analysis_config)
