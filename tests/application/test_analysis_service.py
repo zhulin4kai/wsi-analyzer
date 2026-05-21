@@ -51,4 +51,4 @@ def test_apply_nms_logs_timing_without_changing_result(caplog):
     assert kept_boxes == [[0.0, 0.0, 10.0, 10.0], [100.0, 100.0, 110.0, 110.0]]
     assert kept_scores == [0.9, 0.7]
     assert kept_classes == [1, 2]
-    assert any("[nms timing]" in record.message for record in caplog.records)
+    assert any("NMS 汇总" in record.message for record in caplog.records)

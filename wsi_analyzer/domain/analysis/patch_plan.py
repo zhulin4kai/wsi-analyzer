@@ -1,4 +1,5 @@
 import numpy as np
+import time
 
 from wsi_analyzer.domain.analysis.inference_geometry import InferenceGeometry
 from wsi_analyzer.domain.slide.coordinates import PatchCoordinate
@@ -9,6 +10,7 @@ class PatchPlanner:
 
     def __init__(self, geometry: InferenceGeometry):
         self._geom = geometry
+        self._last_stats = {}
 
     def plan(
         self,
@@ -25,22 +27,36 @@ class PatchPlanner:
             downsample_factor: mask downsample relative to Level-0.
         """
         geom = self._geom
+        plan_start = time.perf_counter()
         w, h = level_0_dim
         win = geom.level0_window_size
         stride = geom.level0_stride
 
+        index_start = time.perf_counter()
         tissue_index = TissueMaskIndex(solid_mask)
+        index_seconds = time.perf_counter() - index_start
         if not tissue_index.has_tissue:
+            self._last_stats = {
+                "candidate_count": 0,
+                "scanned_count": 0,
+                "patch_count": 0,
+                "index_seconds": index_seconds,
+                "scan_seconds": 0.0,
+                "total_seconds": time.perf_counter() - plan_start,
+            }
             return []
 
+        all_x_positions = _grid_positions(w, win, stride)
+        all_y_positions = _grid_positions(h, win, stride)
         x_positions, y_positions = tissue_index.candidate_positions(
-            _grid_positions(w, win, stride),
-            _grid_positions(h, win, stride),
+            all_x_positions,
+            all_y_positions,
             win=win,
             downsample_factor=downsample_factor,
         )
 
         coords: list[PatchCoordinate] = []
+        scan_start = time.perf_counter()
         for y in y_positions:
             for x in x_positions:
                 if tissue_index.has_tissue_in_window(
@@ -57,7 +73,24 @@ class PatchPlanner:
                         read_level=geom.read_level,
                         read_downsample=geom.read_downsample,
                     ))
+        scan_seconds = time.perf_counter() - scan_start
+        self._last_stats = {
+            "candidate_count": len(all_x_positions) * len(all_y_positions),
+            "scanned_count": len(x_positions) * len(y_positions),
+            "patch_count": len(coords),
+            "x_positions": len(x_positions),
+            "y_positions": len(y_positions),
+            "index_seconds": index_seconds,
+            "scan_seconds": scan_seconds,
+            "total_seconds": time.perf_counter() - plan_start,
+            "bbox_crop": True,
+            "integral_image": True,
+        }
         return coords
+
+    @property
+    def last_stats(self) -> dict:
+        return dict(self._last_stats)
 
 
 def _grid_positions(size: int, win: int, stride: int) -> list[int]:

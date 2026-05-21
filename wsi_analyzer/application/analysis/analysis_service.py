@@ -35,6 +35,7 @@ class FullSlideAnalysisService:
         status_callback=None,
         roi_bbox: Optional[tuple] = None,
         resume_data: Optional[dict] = None,
+        stage_progress_callback=None,
     ) -> AnalysisResult:
         session = self._session
         session._cancelled = False
@@ -99,7 +100,10 @@ class FullSlideAnalysisService:
                     f"{phase_prefix}: extracting tissue mask and computing scan coords ..."
                 )
 
-            raw_coords = self._coordinate_service.build_coords(roi_bbox=roi_bbox)
+            raw_coords = self._coordinate_service.build_coords(
+                roi_bbox=roi_bbox,
+                progress_callback=stage_progress_callback,
+            )
 
             if not roi_bbox:
                 if session.is_cancelled:
@@ -197,11 +201,26 @@ class FullSlideAnalysisService:
             return [], [], []
         boxes_arr = np.array(boxes, dtype=np.float32)
         scores_arr = np.array(scores, dtype=np.float32)
+        classes_arr = np.array(classes)
         nms_start = time.perf_counter()
         keep = nms_numpy(boxes_arr, scores_arr, self._config.nms_iou_thresh)
+        unique_classes, counts = np.unique(classes_arr, return_counts=True)
+        largest_group = int(counts.max()) if len(counts) else 0
         logger.info(
-            "[nms timing] input_boxes=%d kept=%d elapsed=%.3fs",
-            len(boxes_arr), len(keep), time.perf_counter() - nms_start,
+            "\n========== NMS 汇总 ==========\n"
+            "输入框数量             %d\n"
+            "保留框数量             %d\n"
+            "类别组数量             %d\n"
+            "最大类别组框数         %d\n"
+            "IOU 阈值               %.3f\n"
+            "NMS 耗时               %.3fs\n"
+            "=============================",
+            len(boxes_arr),
+            len(keep),
+            len(unique_classes),
+            largest_group,
+            self._config.nms_iou_thresh,
+            time.perf_counter() - nms_start,
         )
         return (
             [boxes_arr[idx].tolist() for idx in keep],

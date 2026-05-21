@@ -4,6 +4,27 @@ import sys
 from logging.handlers import RotatingFileHandler
 
 
+_RESET = "\033[0m"
+_COLORS = {
+    logging.DEBUG: "\033[36m",
+    logging.INFO: "\033[32m",
+    logging.WARNING: "\033[33m",
+    logging.ERROR: "\033[31m",
+    logging.CRITICAL: "\033[35m",
+}
+
+
+class _ColorFormatter(logging.Formatter):
+    def format(self, record):
+        message = super().format(record)
+        if os.environ.get("NO_COLOR"):
+            return message
+        color = _COLORS.get(record.levelno)
+        if not color:
+            return message
+        return f"{color}{message}{_RESET}"
+
+
 def _get_log_dir() -> str:
     if getattr(sys, "frozen", False):
         if sys.platform == "win32":
@@ -44,7 +65,10 @@ def setup_logger():
 
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(logging.DEBUG)
-    console_handler.setFormatter(formatter)
+    console_handler.setFormatter(_ColorFormatter(
+        fmt="%(asctime)s [%(levelname)s] %(filename)s:%(lineno)d - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    ))
 
     _logger.addHandler(file_handler)
     _logger.addHandler(console_handler)

@@ -1,3 +1,5 @@
+import time
+
 from wsi_analyzer.domain.analysis.inference_geometry import InferenceGeometry
 from wsi_analyzer.domain.analysis.patch_plan import TissueMaskIndex, _grid_positions
 from wsi_analyzer.domain.slide.coordinates import PatchCoordinate
@@ -8,6 +10,7 @@ class ROIPlanner:
 
     def __init__(self, geometry: InferenceGeometry):
         self._geom = geometry
+        self._last_stats = {}
 
     def plan(
         self,
@@ -17,6 +20,7 @@ class ROIPlanner:
         downsample_factor: float = 1.0,
     ) -> list[PatchCoordinate]:
         geom = self._geom
+        plan_start = time.perf_counter()
         w, h = level_0_dim
         win = geom.level0_window_size
         stride = geom.level0_stride
@@ -28,6 +32,14 @@ class ROIPlanner:
         y_max = min(h, int(y_max))
 
         if x_min >= x_max or y_min >= y_max:
+            self._last_stats = {
+                "candidate_count": 0,
+                "scanned_count": 0,
+                "patch_count": 0,
+                "index_seconds": 0.0,
+                "scan_seconds": 0.0,
+                "total_seconds": time.perf_counter() - plan_start,
+            }
             return []
 
         x_start = min(x_min, max(0, w - win))
@@ -36,16 +48,21 @@ class ROIPlanner:
         y_end = min(y_max, h)
         x_positions = _grid_positions(x_end, win, stride)
         y_positions = _grid_positions(y_end, win, stride)
+        index_start = time.perf_counter()
         tissue_index = TissueMaskIndex(solid_mask) if solid_mask is not None else None
+        index_seconds = time.perf_counter() - index_start
 
         seen: set[tuple[int, int]] = set()
         coords: list[PatchCoordinate] = []
+        scanned_count = 0
+        scan_start = time.perf_counter()
         for y in y_positions:
             if y < y_start:
                 continue
             for x in x_positions:
                 if x < x_start:
                     continue
+                scanned_count += 1
                 cx = x
                 cy = y
 
@@ -69,7 +86,24 @@ class ROIPlanner:
                         read_level=geom.read_level,
                         read_downsample=geom.read_downsample,
                     ))
+        scan_seconds = time.perf_counter() - scan_start
+        self._last_stats = {
+            "candidate_count": len(x_positions) * len(y_positions),
+            "scanned_count": scanned_count,
+            "patch_count": len(coords),
+            "x_positions": len(x_positions),
+            "y_positions": len(y_positions),
+            "index_seconds": index_seconds,
+            "scan_seconds": scan_seconds,
+            "total_seconds": time.perf_counter() - plan_start,
+            "bbox_crop": True,
+            "integral_image": tissue_index is not None,
+        }
         return coords
+
+    @property
+    def last_stats(self) -> dict:
+        return dict(self._last_stats)
 
 
 def generate_roi_coordinates(
