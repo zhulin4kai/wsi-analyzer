@@ -84,6 +84,16 @@ class SettingsDialog(QDialog):
         lbl_device = QLabel(
             self._profile.get("device", "未知") if self._profile else "未知"
         )
+        self.combo_device_mode = QComboBox()
+        self.combo_device_mode.addItem("自动选择", "auto")
+        self.combo_device_mode.addItem("CPU", "cpu")
+        self.combo_device_mode.addItem("GPU", "gpu")
+        saved_device_mode = self._db.get_setting(
+            "ai_device_mode", getattr(config, "AI_DEVICE_MODE", "auto")
+        )
+        device_index = self.combo_device_mode.findData(saved_device_mode)
+        self.combo_device_mode.setCurrentIndex(max(0, device_index))
+
         lbl_io_speed = QLabel(
             f"{self._profile.get('io_speed', 0):.2f} MB/s "
             f"({self._profile.get('io_rating', '未知')})"
@@ -97,7 +107,8 @@ class SettingsDialog(QDialog):
             self._profile.get("batch_size", 16) if self._profile else 16
         )
 
-        layout.addRow("计算设备:", lbl_device)
+        layout.addRow("检测到的设备:", lbl_device)
+        layout.addRow("推理设备:", self.combo_device_mode)
         layout.addRow(
             "当前盘符:",
             QLabel(self._drive_prefix if self._drive_prefix else "未加载文件"),
@@ -237,6 +248,10 @@ class SettingsDialog(QDialog):
         if self._profile and self._drive_prefix:
             self._profile["batch_size"] = self.spin_batch.value()
             self._db.save_system_profile(self._drive_prefix, self._profile)
+
+        self._db.set_setting(
+            "ai_device_mode", self.combo_device_mode.currentData() or "auto"
+        )
 
         # 应用安全边界后写库
         patch_size = max(

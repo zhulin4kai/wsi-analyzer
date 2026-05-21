@@ -52,11 +52,13 @@ class AnalysisConfigResolver:
         profile = self._db.get_system_profile(drive_prefix)
 
         if profile:
-            device = profile.get("device", HardwareProfiler.get_compute_device())
+            auto_device = profile.get("device", HardwareProfiler.get_compute_device())
             batch_size = profile.get("batch_size", 16)
         else:
-            device = HardwareProfiler.get_compute_device()
+            auto_device = HardwareProfiler.get_compute_device()
             batch_size = 16
+
+        device = self._resolve_device(auto_device)
 
         analysis_config = InferenceScaleConfig.from_raw(
             patch_size=model_input_size, stride=stride,
@@ -82,3 +84,17 @@ class AnalysisConfigResolver:
             )
 
         return analysis_config
+
+    def _resolve_device(self, auto_device: str) -> str:
+        device_mode = self._db.get_setting(
+            "ai_device_mode", getattr(config, "AI_DEVICE_MODE", "auto")
+        )
+        if device_mode == "cpu":
+            return "cpu"
+        if device_mode == "gpu":
+            detected = HardwareProfiler.get_compute_device()
+            if detected != "cpu":
+                return detected
+            logger.warning("GPU inference requested but no GPU backend was detected; falling back to CPU")
+            return "cpu"
+        return auto_device
