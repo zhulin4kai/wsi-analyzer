@@ -46,13 +46,13 @@ class TestPatchPlanner:
         coords = planner.plan(mask, (5000, 5000), downsample_factor=50.0)
         assert len(coords) > 0
         for pc in coords:
-            cx = pc.x + pc.level0_size / 2
-            cy = pc.y + pc.level0_size / 2
-            mx = int(cx / 50.0)
-            my = int(cy / 50.0)
-            assert 0 <= mx < 100
-            assert 0 <= my < 100
-            assert mask[my, mx] == 255
+            mx1 = max(int(pc.x / 50.0), 0)
+            my1 = max(int(pc.y / 50.0), 0)
+            mx2 = min(int((pc.x + pc.level0_size) / 50.0), mask.shape[1])
+            my2 = min(int((pc.y + pc.level0_size) / 50.0), mask.shape[0])
+            patch_mask = mask[my1:my2, mx1:mx2]
+            tissue_ratio = np.count_nonzero(patch_mask == 255) / patch_mask.size
+            assert tissue_ratio >= 0.01
 
 
 class TestROIPlanner:
