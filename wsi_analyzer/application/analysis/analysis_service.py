@@ -1,4 +1,5 @@
 import numpy as np
+import time
 from typing import Optional
 
 from wsi_analyzer.application.analysis.analysis_config import InferenceScaleConfig
@@ -10,6 +11,7 @@ from wsi_analyzer.domain.analysis.result import AnalysisResult
 from wsi_analyzer.domain.slide.coordinates import PatchCoordinate
 from wsi_analyzer.domain.detection import nms_numpy
 from wsi_analyzer.infrastructure.inference import BatchInferencer
+from wsi_analyzer.infrastructure.logging import logger
 
 
 class FullSlideAnalysisService:
@@ -195,7 +197,12 @@ class FullSlideAnalysisService:
             return [], [], []
         boxes_arr = np.array(boxes, dtype=np.float32)
         scores_arr = np.array(scores, dtype=np.float32)
+        nms_start = time.perf_counter()
         keep = nms_numpy(boxes_arr, scores_arr, self._config.nms_iou_thresh)
+        logger.info(
+            "[nms timing] input_boxes=%d kept=%d elapsed=%.3fs",
+            len(boxes_arr), len(keep), time.perf_counter() - nms_start,
+        )
         return (
             [boxes_arr[idx].tolist() for idx in keep],
             [round(float(scores_arr[idx]), 4) for idx in keep],

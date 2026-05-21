@@ -1,5 +1,5 @@
 from wsi_analyzer.domain.analysis.inference_geometry import InferenceGeometry
-from wsi_analyzer.domain.analysis.patch_plan import _grid_positions, _has_tissue
+from wsi_analyzer.domain.analysis.patch_plan import TissueMaskIndex, _grid_positions
 from wsi_analyzer.domain.slide.coordinates import PatchCoordinate
 
 
@@ -36,6 +36,7 @@ class ROIPlanner:
         y_end = min(y_max, h)
         x_positions = _grid_positions(x_end, win, stride)
         y_positions = _grid_positions(y_end, win, stride)
+        tissue_index = TissueMaskIndex(solid_mask) if solid_mask is not None else None
 
         seen: set[tuple[int, int]] = set()
         coords: list[PatchCoordinate] = []
@@ -48,9 +49,8 @@ class ROIPlanner:
                 cx = x
                 cy = y
 
-                if solid_mask is not None:
-                    if not _has_tissue(
-                        solid_mask=solid_mask,
+                if tissue_index is not None:
+                    if not tissue_index.has_tissue_in_window(
                         x=cx,
                         y=cy,
                         win=win,
