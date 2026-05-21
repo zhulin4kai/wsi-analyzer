@@ -1,3 +1,5 @@
+import numpy as np
+
 from wsi_analyzer.domain.slide.coordinates import PatchCoordinate
 
 
@@ -19,21 +21,14 @@ class PredictionMapper:
     def to_level0_single(
         boxes, scores, classes, coord: PatchCoordinate
     ) -> tuple:
+        if len(boxes) == 0:
+            return [], [], []
+
         scale = coord.local_to_level0_scale
-        mapped_boxes = []
-        mapped_scores = []
-        mapped_classes = []
-        for box, score, cls_id in zip(boxes, scores, classes):
-            lx1, ly1, lx2, ly2 = box
-            mapped_boxes.append([
-                coord.x + lx1 * scale,
-                coord.y + ly1 * scale,
-                coord.x + lx2 * scale,
-                coord.y + ly2 * scale,
-            ])
-            mapped_scores.append(score)
-            mapped_classes.append(cls_id)
-        return mapped_boxes, mapped_scores, mapped_classes
+        boxes_arr = np.asarray(boxes)
+        offsets = np.array([coord.x, coord.y, coord.x, coord.y], dtype=boxes_arr.dtype)
+        mapped_boxes = boxes_arr * scale + offsets
+        return mapped_boxes.tolist(), list(scores), list(classes)
 
     @staticmethod
     def to_level0_batch(raw_predictions, batch_coords) -> tuple:
