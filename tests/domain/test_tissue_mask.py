@@ -14,7 +14,7 @@ class TestTissueMaskGenerator:
         # Just verify it returns a valid mask shape
 
     def test_dark_on_light(self):
-        gen = TissueMaskGenerator(min_area_ratio=0.0)
+        gen = TissueMaskGenerator(min_area_ratio=0.0, use_hsv_saturation=False)
         img = np.ones((100, 100, 3), dtype=np.uint8) * 200
         # Add a dark rectangle in the center
         img[30:70, 30:70] = [50, 50, 50]
@@ -34,7 +34,7 @@ class TestTissueMaskGenerator:
         assert mask[50, 50] == 0
 
     def test_large_region_passes_filter(self):
-        gen = TissueMaskGenerator(min_area_ratio=0.05)  # 5% = 500 px²
+        gen = TissueMaskGenerator(min_area_ratio=0.05, use_hsv_saturation=False)  # 5% = 500 px²
         img = np.ones((100, 100, 3), dtype=np.uint8) * 200
         # Large dark region (40x40 = 1600 > 500)
         img[30:70, 30:70] = [50, 50, 50]
