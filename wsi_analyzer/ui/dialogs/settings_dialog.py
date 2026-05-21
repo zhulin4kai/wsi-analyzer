@@ -89,7 +89,8 @@ class SettingsDialog(QDialog):
         self.combo_device_mode.addItem("CPU", "cpu")
         self.combo_device_mode.addItem("GPU", "gpu")
         saved_device_mode = self._db.get_setting(
-            "ai_device_mode", getattr(config, "AI_DEVICE_MODE", "auto")
+            getattr(config, "AI_DEVICE_MODE_SETTING", "ai_inference_device_mode"),
+            getattr(config, "AI_DEVICE_MODE", "cpu"),
         )
         device_index = self.combo_device_mode.findData(saved_device_mode)
         self.combo_device_mode.setCurrentIndex(max(0, device_index))
@@ -250,7 +251,8 @@ class SettingsDialog(QDialog):
             self._db.save_system_profile(self._drive_prefix, self._profile)
 
         self._db.set_setting(
-            "ai_device_mode", self.combo_device_mode.currentData() or "auto"
+            getattr(config, "AI_DEVICE_MODE_SETTING", "ai_inference_device_mode"),
+            self.combo_device_mode.currentData() or "cpu",
         )
 
         # 应用安全边界后写库

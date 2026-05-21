@@ -45,6 +45,7 @@ class AnalysisServiceFactory:
         logger.info(
             f"[*] device={analysis_config.device}, batch_size={analysis_config.batch_size}"
         )
+        logger.info("[*] model_backend=Ultralytics/PyTorch")
         logger.info(f"[*] loading model: {model_path}")
         adapter = ModelAdapterFactory.create_adapter(model_path)
 

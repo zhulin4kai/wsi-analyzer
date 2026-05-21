@@ -44,7 +44,7 @@ SQL_CREATE_SYSTEM_PROFILE = """
 SETTINGS_DEFAULTS = [
     ("max_capacity_mb", "150"),
     ("auto_tune_enabled", "True"),
-    ("ai_device_mode", "auto"),
+    ("ai_inference_device_mode", "cpu"),
     ("ai_model_target_mpp", "2.0"),
     ("show_imported_heatmap", "True"),
 ]

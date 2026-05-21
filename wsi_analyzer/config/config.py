@@ -49,7 +49,8 @@ DB_DEFAULT_CAPACITY_MB = 150
 DB_MIN_CAPACITY_MB = 50
 
 # ── AI 推理与图像处理配置 ────────────────────────────────────────────
-AI_DEVICE_MODE = "auto"  # auto / cpu / gpu
+AI_DEVICE_MODE_SETTING = "ai_inference_device_mode"
+AI_DEVICE_MODE = "cpu"  # cpu / gpu / auto
 # model_input_size: YOLO imgsz 参数 (送入模型的图像边长, px).
 # 不是 Level-0 物理窗口尺寸; 该尺寸由 target_mpp / slide_mpp 自动计算.
 AI_PATCH_SIZE = 512      # 模型输入尺寸

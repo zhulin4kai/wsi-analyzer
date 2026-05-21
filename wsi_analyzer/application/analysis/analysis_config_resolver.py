@@ -58,7 +58,8 @@ class AnalysisConfigResolver:
             auto_device = HardwareProfiler.get_compute_device()
             batch_size = 16
 
-        device = self._resolve_device(auto_device)
+        device_mode = self._get_device_mode()
+        device = self._resolve_device(device_mode, auto_device)
 
         analysis_config = InferenceScaleConfig.from_raw(
             patch_size=model_input_size, stride=stride,
@@ -83,18 +84,38 @@ class AnalysisConfigResolver:
                 has_metadata=(meta is not None),
             )
 
+        if device_mode == "cpu" and analysis_config.device != "cpu":
+            raise RuntimeError(
+                f"CPU inference mode resolved to {analysis_config.device!r}"
+            )
+        logger.info(
+            "[analysis device] device_mode=%s resolved_device=%s",
+            device_mode, analysis_config.device,
+        )
         return analysis_config
 
-    def _resolve_device(self, auto_device: str) -> str:
-        device_mode = self._db.get_setting(
-            "ai_device_mode", getattr(config, "AI_DEVICE_MODE", "auto")
-        )
+    def _get_device_mode(self) -> str:
+        device_mode = str(self._db.get_setting(
+            getattr(config, "AI_DEVICE_MODE_SETTING", "ai_inference_device_mode"),
+            getattr(config, "AI_DEVICE_MODE", "cpu"),
+        )).lower()
+        if device_mode not in {"cpu", "gpu", "auto"}:
+            logger.warning(
+                "Unknown AI device mode %r; falling back to CPU", device_mode
+            )
+            return "cpu"
+        return device_mode
+
+    def _resolve_device(self, device_mode: str, auto_device: str) -> str:
         if device_mode == "cpu":
             return "cpu"
         if device_mode == "gpu":
             detected = HardwareProfiler.get_compute_device()
             if detected != "cpu":
                 return detected
-            logger.warning("GPU inference requested but no GPU backend was detected; falling back to CPU")
+            logger.warning(
+                "GPU inference requested but no GPU backend was detected; "
+                "falling back to CPU"
+            )
             return "cpu"
         return auto_device
